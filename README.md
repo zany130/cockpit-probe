@@ -6,41 +6,30 @@ A Cockpit plugin that provides a native web UI around [`hw-probe`](https://githu
 
 ## Current status
 
-**v0.4 — Hardware Findings**
+**v0.5 — Explicit Upload to linux-hardware.org**
 
-This version provides everything in v0.3, plus a **Hardware Findings** section derived from the same local `devices` statuses:
+This version provides everything in v0.4, plus an optional **Share Probe** action.
 
-- counts of hw-probe statuses (Works, Detected, and others when present)
-- devices hw-probe marked `failed` or `malfunc`, with the upstream meaning quoted conservatively
-- user-facing devices with status `detected` listed as unconfirmed operability, not as failures
-- low-level bridges/controllers with `detected` kept under a secondary expandable list
-- unknown future statuses shown as unrecognized, not as failures
+Probes stay local until you choose otherwise. Nothing is uploaded on page load, during version detection, during **Run Hardware Probe**, while parsing, or while deriving findings.
 
-`detected` means hw-probe has not confirmed operability. It is **not** automatically a warning, a break, or poor health.
+**Upload Probe** opens a confirmation dialog first. Confirming runs `hw-probe -upload` on the existing local LATEST probe (not `-all -upload`, so it does not hide a second hardware scan). Native uploads use Cockpit administrative access (`superuser: "require"`). Flatpak uploads run as the signed-in user.
 
-This version does **not**:
+hw-probe applies its own privacy filtering. Upstream says usernames, hostnames, IP addresses, MAC addresses, UUIDs, and serial numbers are not uploaded directly. A 32-byte prefix of a salted SHA512 hash of MAC addresses and serial numbers is still uploaded for deduplication; UUIDs are transformed the same way. Upstream warns that filtering can fail in some edge cases. This is not complete anonymity, and this plugin cannot undo an upload.
 
-- upload anything or contact linux-hardware.org
-- run `hw-probe -check` or `-check-extended` (those mix live tests and benchmarks; see IMPLEMENTATION.md §4.4)
-- invent a hardware health score or percentage
+After a successful upload, hw-probe removes its local LATEST copy. This page keeps the summary already loaded until you refresh or run a new probe. There is no upload history yet.
+
+If hw-probe returns a validated `https://linux-hardware.org/?probe=…` address, **View uploaded probe** is an explicit external link. It does not open automatically.
+
+This version still does **not**:
+
+- upload automatically or retry failed uploads by itself
+- run `hw-probe -check` or `-check-extended`
+- invent a hardware health score
 - install packages, drivers, or firmware
-- offer repair/remediation actions
-- use `sudo`, `su`, `pkexec`, or a shell
+- use `sudo`, `su`, `pkexec`, a shell, curl, or wget
+- implement its own HTTP client
 - change Flatpak sandbox permissions
-- automatically run `hw-probe -all` or `-check` on page load
-
-Version detection runs as the authenticated Cockpit user. Native `hw-probe` 1.6 requires root for the actual probe, so **Run Hardware Probe** uses Cockpit's documented privileged spawn (`superuser: "require"`) only after that button is pressed. Reading an existing native inventory uses Cockpit `cockpit.file` with `superuser: "require"` on two trusted paths:
-
-- `/root/HW_PROBE/LATEST/hw.info/host`
-- `/root/HW_PROBE/LATEST/hw.info/devices`
-
-Those files are an internal hw-probe format (not a documented stable public API). Findings reuse the v0.3 parsed `HardwareDevice[]`; they do not reparse a second file format.
-
-Device statuses remain **Works**, **Detected**, **Failed**, **Malfunction**, and so on as hw-probe reported them. Absence of a problem status is not proof that the machine is healthy.
-
-The official Flatpak still uses the v0.3 unprivileged inventory path. Passive findings work on that same inventory. Active `-check` is not implemented, so Flatpak check/sandbox gaps are not papered over with `flatpak override`.
-
-Nothing is uploaded. Running a local hardware probe does not upload data. Uploading to linux-hardware.org is a separate explicit action (not in this version).
+- persist consent or previous probe URLs
 
 ## Planned workflow
 
@@ -50,7 +39,7 @@ The intended product workflow is:
 local probe → inspect summary → optional explicit upload
 ```
 
-v0.4 covers local probe execution, the hardware summary, and conservative findings from probe statuses. Optional upload comes later.
+v0.5 covers local probe execution, the hardware summary, conservative findings, and optional upload to linux-hardware.org.
 
 ## Package name
 
@@ -130,9 +119,9 @@ npm test
 NODE_ENV=production npm run build
 ```
 
-`npm test` runs Vitest unit tests for parsers, providers, spawn timeout, probe execution, inventory, and UI states.
+`npm test` runs Vitest unit tests for parsers, providers, spawn timeout, probe execution, inventory, findings, upload, and UI states.
 
-`make check` is the optional Cockpit VM integration test from the Starter Kit. It is not required for v0.4 unit validation. The plugin does not run `hw-probe -check`.
+`make check` is the optional Cockpit VM integration test from the Starter Kit. It is not required for v0.5 unit validation. The plugin does not run `hw-probe -check`.
 
 ## Real-host verification (Bazzite / Fedora)
 
@@ -176,6 +165,7 @@ This plugin was implemented and unit-tested in a Chromebook Linux container. It 
    - Low-level PCI bridges/controllers with `detected` stay under **Low-level devices without confirmed operability**, not as danger cards
    - Unrecognized statuses, if any, are listed separately from reported problems
    - Counts are integers (Works / Detected / …), never a percentage or “Hardware Health”
+   - **Share Probe** is below the local summary. Opening it does not upload.
 
 5. Click **Run Hardware Probe**. Native probes request Cockpit administrative access and run `-all` without `-upload`. After success, the summary should refresh from the two files, and Hardware Findings should refresh from that same inventory. Compare with a privileged terminal run only for validation:
 
@@ -190,9 +180,26 @@ This plugin was implemented and unit-tested in a Chromebook Linux container. It 
 
 6. Click **Refresh** only after the probe is idle. Refresh re-runs version detection and re-reads the existing inventory; it does not start `hw-probe -all` or `-check` by itself.
 
-7. Confirm no network/upload request occurs while using the page (browser developer tools → Network, or `journalctl` / Cockpit logs). The plugin has no Upload control in this version.
+7. Confirm no network/upload request occurs until you explicitly confirm **Upload Probe**. Use browser developer tools → Network, or `journalctl` / Cockpit logs. Capability detection, **Run Hardware Probe**, parsing, and findings never pass `-upload`.
 
-8. Do **not** run `hw-probe -check` or `-check-extended` from this plugin. Those commands are active tests plus benchmarks; v0.4 does not expose them. If you want to inspect what `-check` would do on this host, that is a manual upstream experiment, not plugin acceptance.
+8. Do **not** expect this plugin to run `hw-probe -check`. Those commands remain out of scope.
+
+9. **Upload checklist (v0.5)** — only after you intend to share a probe with the public linux-hardware.org database:
+
+   1. Opening Hardware Probe causes no upload (no unexpected network from this plugin).
+   2. **Run Hardware Probe** still runs `-all` only and does not upload.
+   3. Hardware Summary and Hardware Findings still load.
+   4. **Share Probe** is below the local summary, not the primary CTA.
+   5. **Upload Probe** opens confirmation and does not upload yet.
+   6. Confirmation mentions linux-hardware.org, hashed identifiers, and that upload cannot be undone here. It must not claim complete anonymity.
+   7. **Cancel** performs no upload.
+   8. Confirm runs one `hw-probe -upload` (not `-all -upload`) and requests administrative access for native installs.
+   9. Success shows **View uploaded probe** only for `https://linux-hardware.org/?probe=…` if hw-probe printed one.
+   10. That link opens the external site only when you click it.
+   11. The local summary remains on the page after upload (hw-probe may delete LATEST; Refresh may then show no local probe).
+   12. A failed upload does not mark the local probe as failed.
+   13. Refresh does not repeat the upload.
+   14. **Try again** asks for confirmation again.
 
 On Fedora:
 

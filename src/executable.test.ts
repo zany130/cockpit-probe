@@ -7,8 +7,10 @@ import {
     FLATPAK_INVOCATION,
     HW_PROBE_FLATPAK_APP_ID,
     HW_PROBE_LOCAL_PROBE_ARGUMENTS,
+    HW_PROBE_UPLOAD_ARGUMENTS,
     PATH_DUMPVERSION_INVOCATION,
     buildLocalProbeArgv,
+    buildUploadArgv,
     isUploadArgument,
     normalizeAuthenticatedHome,
     userLocalHwProbePath,
@@ -158,6 +160,39 @@ describe('buildLocalProbeArgv', () => {
             expect(argv).not.toContain('-check-extended');
             expect(argv.join('\0')).not.toMatch(/(^|\0)-upload(\0|$)/);
         }
+    });
+});
+
+describe('buildUploadArgv', () => {
+    it('uses only -upload for a native PATH install', () => {
+        expect(buildUploadArgv(PATH_DUMPVERSION_INVOCATION)).toEqual(['hw-probe', '-upload']);
+    });
+
+    it('uses the user-local executable with -upload', () => {
+        expect(buildUploadArgv({
+            kind: 'native',
+            executable: '/home/testuser/.local/bin/hw-probe',
+            source: 'user-local',
+        })).toEqual(['/home/testuser/.local/bin/hw-probe', '-upload']);
+    });
+
+    it('uses Flatpak run with -upload', () => {
+        expect(buildUploadArgv(FLATPAK_INVOCATION)).toEqual([
+            'flatpak',
+            'run',
+            HW_PROBE_FLATPAK_APP_ID,
+            '-upload',
+        ]);
+    });
+
+    it('does not combine -upload with -all, -src, or -check', () => {
+        expect([...HW_PROBE_UPLOAD_ARGUMENTS]).toEqual(['-upload']);
+        const argv = buildUploadArgv(PATH_DUMPVERSION_INVOCATION);
+        expect(argv).not.toContain('-all');
+        expect(argv).not.toContain('-src');
+        expect(argv).not.toContain('-source');
+        expect(argv).not.toContain('-check');
+        expect(argv).not.toContain('-probe');
     });
 });
 

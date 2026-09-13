@@ -21,7 +21,7 @@ import { CubesIcon } from '@patternfly/react-icons';
 
 import cockpit from 'cockpit';
 
-import type { HwProbeCapability, HwProbeSource, InventoryState, ProbeExecutionState } from './model';
+import type { HwProbeCapability, HwProbeSource, InventoryState, ProbeExecutionState, UploadState } from './model';
 import { HardwareSummaryView } from './hardware-summary-view';
 import { ProbeExecutionView } from './probe-execution-view';
 
@@ -38,6 +38,9 @@ interface CapabilityViewProps {
     onRunProbe?: (() => void) | undefined;
     onCancelProbe?: (() => void) | undefined;
     inventory?: InventoryState | undefined;
+    upload?: UploadState | undefined;
+    onRequestUpload?: (() => void) | undefined;
+    onCancelUpload?: (() => void) | undefined;
 }
 
 export const CapabilityView = ({
@@ -47,6 +50,9 @@ export const CapabilityView = ({
     onRunProbe,
     onCancelProbe,
     inventory,
+    upload,
+    onRequestUpload,
+    onCancelUpload,
 }: CapabilityViewProps) => {
     const loading = status.phase === "loading";
 
@@ -61,7 +67,7 @@ export const CapabilityView = ({
                     <Button
                             variant="secondary"
                             onClick={onRefresh}
-                            isDisabled={loading || execution?.status === "running"}
+                            isDisabled={loading || execution?.status === "running" || upload?.status === "uploading"}
                             aria-label={_("Refresh hardware probe detection")}
                     >
                         {_("Refresh")}
@@ -77,6 +83,9 @@ export const CapabilityView = ({
                         onRunProbe={onRunProbe}
                         onCancelProbe={onCancelProbe}
                         inventory={inventory}
+                        upload={upload}
+                        onRequestUpload={onRequestUpload}
+                        onCancelUpload={onCancelUpload}
                 />
             )}
         </div>
@@ -98,6 +107,9 @@ const ReadyStatus = ({
     onRunProbe,
     onCancelProbe,
     inventory,
+    upload,
+    onRequestUpload,
+    onCancelUpload,
 }: {
     capability: HwProbeCapability;
     onRefresh: () => void;
@@ -105,6 +117,9 @@ const ReadyStatus = ({
     onRunProbe?: (() => void) | undefined;
     onCancelProbe?: (() => void) | undefined;
     inventory?: InventoryState | undefined;
+    upload?: UploadState | undefined;
+    onRequestUpload?: (() => void) | undefined;
+    onCancelUpload?: (() => void) | undefined;
 }) => {
     switch (capability.state) {
     case "available":
@@ -116,6 +131,9 @@ const ReadyStatus = ({
                     onRunProbe={onRunProbe}
                     onCancelProbe={onCancelProbe}
                     inventory={inventory}
+                    upload={upload}
+                    onRequestUpload={onRequestUpload}
+                    onCancelUpload={onCancelUpload}
             />
         );
     case "unavailable":
@@ -159,6 +177,9 @@ const AvailableStatus = ({
     onRunProbe,
     onCancelProbe,
     inventory,
+    upload,
+    onRequestUpload,
+    onCancelUpload,
 }: {
     version: string | null;
     source?: HwProbeSource | undefined;
@@ -166,6 +187,9 @@ const AvailableStatus = ({
     onRunProbe?: (() => void) | undefined;
     onCancelProbe?: (() => void) | undefined;
     inventory?: InventoryState | undefined;
+    upload?: UploadState | undefined;
+    onRequestUpload?: (() => void) | undefined;
+    onCancelUpload?: (() => void) | undefined;
 }) => {
     const backend = source === "flatpak" ? "flatpak" : "native";
     const hideIdleExecution = inventory?.status === "empty" && execution.status === "idle";
@@ -186,6 +210,10 @@ const AvailableStatus = ({
                         inventory={inventory}
                         onRunProbe={onRunProbe}
                         probeRunning={execution.status === "running"}
+                        upload={upload}
+                        onRequestUpload={onRequestUpload}
+                        onCancelUpload={onCancelUpload}
+                        uploadBackend={backend}
                 />
             )}
             {onRunProbe && onCancelProbe && !hideIdleExecution && (

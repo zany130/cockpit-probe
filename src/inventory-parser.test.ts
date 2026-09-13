@@ -188,6 +188,14 @@ describe('normalizeInventory', () => {
         expect(JSON.stringify(result.summary)).not.toMatch(/f{32}/);
     });
 
+    it('copies a conservative hw-probe time stamp for upload copy', () => {
+        const result = normalizeInventory(VALID_HOST_FIXTURE, VALID_DEVICES_FIXTURE);
+        expect(result.ok).toBe(true);
+        if (!result.ok)
+            return;
+        expect(result.summary.host.collectedAt).toBe('2026-09-13 12:00:00 UTC');
+    });
+
     it('does not copy unknown or transient host keys into the summary', () => {
         const result = normalizeInventory(VALID_HOST_FIXTURE, VALID_DEVICES_FIXTURE);
         expect(result.ok).toBe(true);

@@ -18,6 +18,12 @@ export const CAPABILITY_TIMEOUT_MS = 8000;
  */
 export const PROBE_TIMEOUT_MS = 10 * 60 * 1000;
 
+/*
+ * Upload sends a packed probe over the network via hw-probe's curl POST.
+ * Ten minutes is a hang-protection ceiling for slow links, not a target.
+ */
+export const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
+
 export const HW_PROBE_SPAWN_ENVIRON = ["LC_ALL=C", "LANG=C"] as const;
 
 export interface SpawnProcess {

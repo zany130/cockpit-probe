@@ -51,6 +51,7 @@ describe('HardwareSummaryView', () => {
         expect(screen.queryByText(/1002-744c/)).not.toBeInTheDocument();
         expect(screen.getByText('Hardware Findings')).toBeInTheDocument();
         expect(screen.getByText(/No problems are reported in the available hw-probe data/)).toBeInTheDocument();
+        expect(screen.queryByText('Share Probe')).not.toBeInTheDocument();
     });
 
     it('shows a loading state without running a probe', () => {
@@ -121,5 +122,24 @@ describe('HardwareSummaryView', () => {
         render(<HardwareSummaryView inventory={{ status: 'ready', summary }} />);
         expect(screen.getByText('Hardware Summary')).toBeInTheDocument();
         expect(screen.getByText(/No CPU was reported/)).toBeInTheDocument();
+    });
+
+    it('keeps Share Probe below findings and does not upload on render', () => {
+        const onRequestUpload = vi.fn();
+        render(
+            <HardwareSummaryView
+                    inventory={{ status: 'ready', summary: readySummary() }}
+                    upload={{ status: 'idle' }}
+                    onRequestUpload={onRequestUpload}
+                    onCancelUpload={() => {}}
+            />
+        );
+        const summary = screen.getByText('Hardware Summary');
+        const findings = screen.getByText('Hardware Findings');
+        const share = screen.getByText('Share Probe');
+        expect(summary.compareDocumentPosition(findings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(findings.compareDocumentPosition(share) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(onRequestUpload).not.toHaveBeenCalled();
+        expect(screen.getByRole('button', { name: 'Upload probe to linux-hardware.org' }).className).toContain('pf-m-secondary');
     });
 });

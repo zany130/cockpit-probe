@@ -32,10 +32,12 @@ import type {
     HardwareSummary,
     InventoryError,
     InventoryState,
+    UploadState,
 } from './model';
 import { deviceLabel, formatDeviceStatus } from './device-display';
 import { HardwareFindingsView } from './hardware-findings-view';
 import { buildSystemTitle } from './inventory-normalizer';
+import { ShareProbeView } from './share-probe-view';
 
 const _ = cockpit.gettext;
 
@@ -43,12 +45,20 @@ interface HardwareSummaryViewProps {
     inventory: InventoryState;
     onRunProbe?: (() => void) | undefined;
     probeRunning?: boolean | undefined;
+    upload?: UploadState | undefined;
+    onRequestUpload?: (() => void) | undefined;
+    onCancelUpload?: (() => void) | undefined;
+    uploadBackend?: "native" | "flatpak" | undefined;
 }
 
 export const HardwareSummaryView = ({
     inventory,
     onRunProbe,
     probeRunning = false,
+    upload,
+    onRequestUpload,
+    onCancelUpload,
+    uploadBackend = "native",
 }: HardwareSummaryViewProps) => {
     switch (inventory.status) {
     case "loading":
@@ -60,11 +70,34 @@ export const HardwareSummaryView = ({
             </EmptyState>
         );
     case "empty":
-        return <EmptyInventory onRunProbe={onRunProbe} probeRunning={probeRunning} />;
+        return (
+            <>
+                <EmptyInventory onRunProbe={onRunProbe} probeRunning={probeRunning} />
+                {onRequestUpload && onCancelUpload && upload && (
+                    <ShareProbeView
+                            canUpload={false}
+                            backend={uploadBackend}
+                            upload={upload}
+                            probeRunning={probeRunning}
+                            onRequestUpload={onRequestUpload}
+                            onCancelUpload={onCancelUpload}
+                    />
+                )}
+            </>
+        );
     case "failed":
         return <FailedInventory error={inventory.error} onRunProbe={onRunProbe} />;
     case "ready":
-        return <ReadyInventory summary={inventory.summary} />;
+        return (
+            <ReadyInventory
+                    summary={inventory.summary}
+                    upload={upload}
+                    onRequestUpload={onRequestUpload}
+                    onCancelUpload={onCancelUpload}
+                    probeRunning={probeRunning}
+                    uploadBackend={uploadBackend}
+            />
+        );
     case "idle":
     default:
         return null;
@@ -148,7 +181,21 @@ export function inventoryErrorBody(error: InventoryError): string {
     return _("The local hardware summary is unavailable. Nothing was uploaded.");
 }
 
-const ReadyInventory = ({ summary }: { summary: HardwareSummary }) => (
+const ReadyInventory = ({
+    summary,
+    upload,
+    onRequestUpload,
+    onCancelUpload,
+    probeRunning,
+    uploadBackend,
+}: {
+    summary: HardwareSummary;
+    upload?: UploadState | undefined;
+    onRequestUpload?: (() => void) | undefined;
+    onCancelUpload?: (() => void) | undefined;
+    probeRunning: boolean;
+    uploadBackend: "native" | "flatpak";
+}) => (
     <div className="hw-probe-summary">
         <h2 className="hw-probe-summary-heading">{_("Hardware Summary")}</h2>
         <p className="hw-probe-summary-note">
@@ -188,6 +235,17 @@ const ReadyInventory = ({ summary }: { summary: HardwareSummary }) => (
         </Gallery>
         <HardwareFindingsView summary={summary} />
         <DeviceInventory summary={summary} />
+        {onRequestUpload && onCancelUpload && upload && (
+            <ShareProbeView
+                    canUpload
+                    collectedAt={summary.host.collectedAt}
+                    backend={uploadBackend}
+                    upload={upload}
+                    probeRunning={probeRunning}
+                    onRequestUpload={onRequestUpload}
+                    onCancelUpload={onCancelUpload}
+            />
+        )}
     </div>
 );
 

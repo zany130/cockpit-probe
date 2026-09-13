@@ -48,7 +48,7 @@ function spawn(args: string[]) {
         if (state === 'loading')
             return;
 
-        if (args.includes('-upload') || args.includes('--upload') || args.includes('-check')) {
+        if (args.includes('-check')) {
             window.setTimeout(() => {
                 reject({ problem: null, exit_status: 99, exit_signal: null, message: 'disallowed argument' });
             }, 10);
@@ -68,6 +68,23 @@ function spawn(args: string[]) {
                     resolve(
                         'Probe for hardware ... Ok\nReading logs ... Ok\nLocal probe path: /root/HW_PROBE/LATEST/hw.info\n'
                     );
+                    return;
+                }
+                if (args.includes('-upload')) {
+                    if (state === 'admin-denied') {
+                        reject({ problem: 'access-denied', exit_status: null, exit_signal: null, message: '' });
+                        return;
+                    }
+                    if (state === 'empty-inventory' && !probed) {
+                        reject({
+                            problem: null,
+                            exit_status: 1,
+                            exit_signal: null,
+                            message: "can't access probe, please make probe first",
+                        });
+                        return;
+                    }
+                    resolve('Probe URL: https://linux-hardware.org/?probe=b394035f90\n');
                     return;
                 }
                 resolve('1.6\n');

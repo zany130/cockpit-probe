@@ -205,6 +205,28 @@ describe('CapabilityView', () => {
         expect(screen.queryByText(/health score/i)).not.toBeInTheDocument();
     });
 
+    it('does not upload from the empty inventory view', () => {
+        const onRequestUpload = vi.fn();
+        render(
+            <CapabilityView
+                    status={{ phase: 'ready', capability: { state: 'available', version: '1.6' } }}
+                    onRefresh={() => {}}
+                    execution={{ status: 'idle' }}
+                    onRunProbe={() => {}}
+                    onCancelProbe={() => {}}
+                    inventory={{ status: 'empty' }}
+                    upload={{ status: 'idle' }}
+                    onRequestUpload={onRequestUpload}
+                    onCancelUpload={() => {}}
+            />
+        );
+        expect(screen.getByText(/Run a hardware probe before uploading/)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Upload probe to linux-hardware.org' })).not.toBeInTheDocument();
+        expect(onRequestUpload).not.toHaveBeenCalled();
+        screen.getByRole('button', { name: 'Run hardware probe' }).click();
+        expect(onRequestUpload).not.toHaveBeenCalled();
+    });
+
     it('shows a parsed summary and keeps probe success distinct from parse failure', () => {
         const result = normalizeInventory(VALID_HOST_FIXTURE, VALID_DEVICES_FIXTURE);
         if (!result.ok)
@@ -224,6 +246,59 @@ describe('CapabilityView', () => {
         expect(screen.getByText(/completed successfully/)).toBeInTheDocument();
         expect(screen.queryByText(/hardware probe command failed/i)).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /upload/i })).not.toBeInTheDocument();
+    });
+
+    it('keeps upload idle when a local summary is shown', () => {
+        const result = normalizeInventory(VALID_HOST_FIXTURE, VALID_DEVICES_FIXTURE);
+        if (!result.ok)
+            throw new Error('fixture must normalize');
+        const onRequestUpload = vi.fn();
+        render(
+            <CapabilityView
+                    status={{ phase: 'ready', capability: { state: 'available', version: '1.6' } }}
+                    onRefresh={() => {}}
+                    execution={{ status: 'succeeded', startedAt: 0, completedAt: 1 }}
+                    onRunProbe={() => {}}
+                    onCancelProbe={() => {}}
+                    inventory={{ status: 'ready', summary: result.summary }}
+                    upload={{ status: 'idle' }}
+                    onRequestUpload={onRequestUpload}
+                    onCancelUpload={() => {}}
+            />
+        );
+        expect(screen.getByText('Share Probe')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Upload probe to linux-hardware.org' })).toBeInTheDocument();
+        expect(onRequestUpload).not.toHaveBeenCalled();
+        expect(screen.getByText(/completed successfully/)).toBeInTheDocument();
+        expect(screen.getByText('Hardware Findings')).toBeInTheDocument();
+        screen.getByRole('button', { name: 'Run hardware probe' }).click();
+        expect(onRequestUpload).not.toHaveBeenCalled();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('keeps hardware findings when an upload has failed', () => {
+        const result = normalizeInventory(VALID_HOST_FIXTURE, VALID_DEVICES_FIXTURE);
+        if (!result.ok)
+            throw new Error('fixture must normalize');
+        render(
+            <CapabilityView
+                    status={{ phase: 'ready', capability: { state: 'available', version: '1.6' } }}
+                    onRefresh={() => {}}
+                    execution={{ status: 'succeeded', startedAt: 0, completedAt: 1 }}
+                    onRunProbe={() => {}}
+                    onCancelProbe={() => {}}
+                    inventory={{ status: 'ready', summary: result.summary }}
+                    upload={{
+                        status: 'failed',
+                        error: { kind: 'network-unavailable', message: 'unreachable' },
+                    }}
+                    onRequestUpload={() => {}}
+                    onCancelUpload={() => {}}
+            />
+        );
+        expect(screen.getByText('Hardware Findings')).toBeInTheDocument();
+        expect(screen.getByText(/completed successfully/)).toBeInTheDocument();
+        expect(screen.getByText('linux-hardware.org could not be reached')).toBeInTheDocument();
     });
 
     it('refreshes from the empty state into a summary after a successful probe', () => {

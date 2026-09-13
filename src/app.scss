@@ -81,7 +81,31 @@
     margin-block: var(--pf-t--global--spacer--md);
 }
 
-.hw-probe-finding-list h3 {
-    font-size: var(--pf-t--global--font--size--heading--xs);
-    margin-block-end: var(--pf-t--global--spacer--sm);
+.hw-probe-share {
+    margin-block-start: var(--pf-t--global--spacer--lg);
+}
+
+.hw-probe-upload-confirm {
+    margin-block-start: var(--pf-t--global--spacer--md);
+    max-width: 42rem;
+}
+
+.hw-probe-upload-confirm:focus {
+    outline: none;
+}
+
+.hw-probe-upload-confirm:focus-visible {
+    outline: var(--pf-t--global--border--width--control--default) solid var(--pf-t--global--border--color--brand--default);
+    outline-offset: var(--pf-t--global--spacer--xs);
+}
+
+.hw-probe-upload-copy p + p {
+    margin-block-start: var(--pf-t--global--spacer--sm);
+}
+
+.hw-probe-upload-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--pf-t--global--spacer--sm);
+    margin-block-start: var(--pf-t--global--spacer--md);
 }

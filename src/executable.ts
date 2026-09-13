@@ -87,6 +87,13 @@ export function userLocalInvocation(home: string): NativeHwProbeInvocation | nul
  */
 export const HW_PROBE_LOCAL_PROBE_ARGUMENTS = ["-all"] as const;
 
+/*
+ * Current hw-probe 1.6: `-upload` packages the existing DATA_DIR
+ * (`LATEST/hw.info`) and POSTs it. It does not set Probe, so it does
+ * not run another `-all`. Do not combine with `-all` here.
+ */
+export const HW_PROBE_UPLOAD_ARGUMENTS = ["-upload"] as const;
+
 const UPLOAD_FLAGS = new Set([
     "-upload",
     "--upload",
@@ -127,6 +134,26 @@ export function buildLocalProbeArgv(invocation: HwProbeInvocation): string[] {
         throw new Error("local probe argv must not use the obsolete undocumented probe flag");
     if (argv.includes("-check") || argv.includes("-check-extended"))
         throw new Error("local probe argv must not run hw-probe hardware checks");
+    return argv;
+}
+
+export function buildUploadArgv(invocation: HwProbeInvocation): string[] {
+    for (const arg of HW_PROBE_UPLOAD_ARGUMENTS) {
+        if (arg !== "-upload")
+            throw new Error("upload arguments must be exactly -upload");
+    }
+
+    const argv = buildHwProbeArgv(invocation, HW_PROBE_UPLOAD_ARGUMENTS);
+    if (!argv.some(isUploadArgument))
+        throw new Error("upload argv must request upload");
+    if (argv.includes("-all"))
+        throw new Error("upload argv must not run a new hardware probe");
+    if (argv.includes("-probe"))
+        throw new Error("upload argv must not use the obsolete undocumented probe flag");
+    if (argv.includes("-check") || argv.includes("-check-extended"))
+        throw new Error("upload argv must not run hw-probe hardware checks");
+    if (argv.includes("-src") || argv.includes("-source") || argv.includes("--src") || argv.includes("--source"))
+        throw new Error("upload argv must not take an arbitrary source path");
     return argv;
 }
 

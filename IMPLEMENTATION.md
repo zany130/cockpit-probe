@@ -375,6 +375,49 @@ No automatic or explicit check action. Do not silently substitute `-check-extend
 
 Passive findings reuse the v0.3 inventory path (native privileged files or the documented Flatpak data dir). Official Flatpak docs ask for root mainly to check drive health (SMART during `-all`). This environment did not run Flatpak `-check`; sandboxing would likely reduce `glxgears` / `hdparm` / `memtester` usefulness. Because active check is not implemented, that gap is not papered over. No `flatpak override`.
 
+### 4.5 v0.5 upstream verification (2026-09-13)
+
+Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master` (`GetOptions` `upload|confirm-upload-of-hashed-ids!`, help `-upload` / `-src` / `-save`, `createPackage()`, `uploadData()`, `cleanData()`, option normalization, `makeProbe()` gate) and the README Privacy / Usage sections. This environment did **not** upload from Bazzite.
+
+**What `-upload` does**
+
+1. **Upload.** `uploadData()` packs the probe (`tar` of `hw.info`) and POSTs it with `curl` to `https://linux-hardware.org/upload_result.php` (`-F file=@pkg`, `-F hwaddr=…`, tool version, client salt). The plugin never implements that HTTP client.
+2. **Existing LATEST vs new probe.** `-upload` alone does **not** set `Probe`. `makeProbe()` runs only when `Probe` or `Check` is set. `createPackage()` without `-src` uses existing `$DATA_DIR` (`$PROBE_DIR/LATEST/hw.info`) and errors with “please make probe first” if it is missing. **v0.5 therefore invokes `-upload` only**, not `-all -upload`.
+3. **Does it require `-all` together with `-upload`?** No. README examples use `-all -upload` as a combined “probe then upload” convenience. Combining them **does** run a new probe (and redirects write to a temp dir under LATEST, then `cleanData()`). v0.5 must not hide that extra probe.
+4. **Existing saved probe.** `-src|-source PATH` is “A probe to upload.” v0.5 does not pass `-src` (no arbitrary path). Native/Flatpak `-upload` uses that invocation’s DATA_DIR, which is the same LATEST tree v0.3 reads.
+5. **Root.** Native `Probe` requires root. `-upload` alone does not set Probe, so the hard root-exit is not taken. Accessing `/root/HW_PROBE/LATEST` still needs privilege; native upload uses `superuser: "require"`. Flatpak DATA_DIR is under the user XDG data home; Flatpak upload is unprivileged.
+6. **Endpoint.** `https://linux-hardware.org/upload_result.php`. On TLS failure, upstream may retry HTTP. The plugin still only accepts `https://linux-hardware.org/?probe=…` as a clickable result.
+7. **Success output.** `uploadData()` prints the server body (`print $Log`) after stripping a private-access token line. It extracts `probe=(\w+)` and writes `Probe URL: https://linux-hardware.org/?probe=$id` into `$PROBE_DIR/LOG`. Stdout is the server response, typically containing `probe=<id>` and sometimes a full URL.
+8–9. **URL / probe ID.** Sample public probes look like `https://linux-hardware.org/?probe=b394035f90`. v0.5 parses that host/query only, or a whitespace-delimited `probe=<id>` token, then applies the documented URL shape.
+10. **Exit codes.** `exitStatus(0)` on success; `exitStatus(1)` on pack/upload failure (including curl errors).
+11. **No network.** curl failures (codes 6/7/28 observed in messages) → network-unavailable. Upstream may also fall back to Perl POST.
+12. **Server reject.** curl 22 (“The requested URL returned error”) → upstream-rejected.
+13–15. **Privacy.** Help/README: usernames, hostnames, IPs, MACs, UUIDs, serials are “NOT uploaded directly.” A 32-byte prefix of salted SHA512 of MACs and serials **is** uploaded for deduplication; UUIDs are decorated the same way. “Be aware that this may fail in certain edge cases.” Hardware inventory, logs, and hashed identifiers remain. Do not claim complete anonymity.
+16–17. **Mutates LATEST.** After a successful upload, `cleanData()` `rmtree`s `$LATEST_DIR`. That is upstream, not this plugin. Confirmation copy must say so. The already-rendered summary stays in React until Refresh or a new probe.
+18. **Re-upload.** Supported if LATEST exists. After a successful upload LATEST is gone, so another upload needs a new local probe first.
+19–20. **Flatpak.** Official docs: `flatpak run org.linux_hardware.hw-probe -all -upload`. The wrapper prepends `-flatpak`. Manifest includes `--share=network`. v0.5 uses `flatpak run org.linux_hardware.hw-probe -upload` without `flatpak override`. Not claimed native/Flatpak parity.
+
+**Selected invocation**
+
+- Native PATH: `["hw-probe", "-upload"]` with `superuser: "require"`
+- User-local: `["<home>/.local/bin/hw-probe", "-upload"]` with `superuser: "require"`
+- Flatpak: `["flatpak", "run", "org.linux_hardware.hw-probe", "-upload"]` unprivileged
+
+Timeout: `UPLOAD_TIMEOUT_MS` = 10 minutes (hang ceiling). Cancellation: `process.close("cancelled")`, same as v0.2. Cancellation is best-effort; hw-probe may still finish packing or complete an in-flight curl POST after Cockpit closes the process.
+
+**v0.5 security audit (source)**
+
+- No automatic upload: capability, local `-all`, inventory `cockpit.file`, and findings never pass `-upload`
+- Plugin has no HTTP client (`fetch` / Axios / curl / wget) for linux-hardware.org
+- No `sudo` / `su` / `pkexec` / `sh -c` / `bash -c`
+- Upload argv is fixed: `-upload` only (no `-src`, no server URL, no user-supplied args)
+- Rendered result links must be `https://linux-hardware.org/?probe=<id>`
+- Consent is not persisted; failed uploads are not retried automatically
+- No probe history database or localStorage
+- No remediation / package / driver / firmware actions
+
+This is the first milestone allowed to cause an external network request, and only through hw-probe after explicit confirmation.
+
 ---
 
 # 5. Design Principles
@@ -1043,26 +1086,22 @@ Goal:
 
 Allow the user to intentionally upload the current probe.
 
-Implement:
+Status (2026-09-13): implemented in this repository (unit tests). The Bazzite real-host upload gate is for the operator; this environment cannot mark it passed. See §4.5.
 
-- Upload action
-- confirmation/privacy explanation
-- upload running state
-- returned URL parsing/validation
-- successful Open probe action
-- upload errors that preserve local results
+Implemented:
 
-Requirements:
+- separate Share Probe action (not combined with Run Hardware Probe)
+- confirmation dialog with upstream-accurate privacy language
+- `hw-probe -upload` only (existing LATEST; not `-all -upload`)
+- native `superuser: "require"`; Flatpak unprivileged
+- typed upload state; URL parser accepts only `https://linux-hardware.org/?probe=<id>`
+- View uploaded probe is an explicit external link; it does not auto-navigate
+- upload failure / cancel / timeout do not clear the local summary
+- no history, no persisted consent, no automatic retry
 
-- never automatic
-- never triggered by normal refresh
-- never triggered by local probe execution
-- validate returned URL
-- no credentials/secrets in logs
+Do not start v0.6 from this milestone.
 
-Real-host gate:
-
-Upload one explicitly approved test probe and verify the returned URL.
+Real-host gate (operator): see README checklist.
 
 ---
 

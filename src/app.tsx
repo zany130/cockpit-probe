@@ -12,9 +12,10 @@ import cockpit from 'cockpit';
 import { resolveHwProbe } from './capability-provider';
 import { CapabilityView, type CapabilityViewStatus } from './capability-view';
 import type { HwProbeInvocation } from './executable';
-import type { HwProbeCapability, InventoryState, ProbeExecutionState } from './model';
+import type { HwProbeCapability, InventoryState, ProbeExecutionState, UploadState } from './model';
 import { createProbeController } from './probe-provider';
 import { loadHardwareInventory, reconcileInventoryWithProbe, cockpitInventoryFileReader } from './inventory-provider';
+import { createUploadController } from './upload-provider';
 import { SectionErrorBoundary } from './section-error-boundary';
 
 const _ = cockpit.gettext;
@@ -23,9 +24,11 @@ export const Application = () => {
     const [status, setStatus] = useState<CapabilityViewStatus>({ phase: "loading" });
     const [execution, setExecution] = useState<ProbeExecutionState>({ status: "idle" });
     const [inventory, setInventory] = useState<InventoryState>({ status: "idle" });
+    const [upload, setUpload] = useState<UploadState>({ status: "idle" });
     const [refreshNonce, setRefreshNonce] = useState(0);
     const invocationRef = useRef<HwProbeInvocation | null>(null);
     const controllerRef = useRef(createProbeController());
+    const uploadRef = useRef(createUploadController());
     const readInventory = useRef(cockpitInventoryFileReader());
 
     const refresh = useCallback(() => {
@@ -33,6 +36,8 @@ export const Application = () => {
     }, []);
 
     const runProbe = useCallback(() => {
+        if (uploadRef.current.getState().status === "uploading")
+            return;
         const invocation = invocationRef.current;
         if (invocation == null)
             return;
@@ -43,8 +48,25 @@ export const Application = () => {
         controllerRef.current.cancel();
     }, []);
 
+    const requestUpload = useCallback(() => {
+        if (controllerRef.current.getState().status === "running")
+            return;
+        const invocation = invocationRef.current;
+        if (invocation == null)
+            return;
+        uploadRef.current.run(invocation).then(() => undefined, () => undefined);
+    }, []);
+
+    const cancelUpload = useCallback(() => {
+        uploadRef.current.cancel();
+    }, []);
+
     useEffect(() => {
         return controllerRef.current.subscribe(setExecution);
+    }, []);
+
+    useEffect(() => {
+        return uploadRef.current.subscribe(setUpload);
     }, []);
 
     const loadInventory = useCallback((invocation: HwProbeInvocation, executionState: ProbeExecutionState) => {
@@ -118,6 +140,9 @@ export const Application = () => {
                                 onRunProbe={runProbe}
                                 onCancelProbe={cancelProbe}
                                 inventory={inventory}
+                                upload={upload}
+                                onRequestUpload={requestUpload}
+                                onCancelUpload={cancelUpload}
                         />
                     </SectionErrorBoundary>
                 </div>

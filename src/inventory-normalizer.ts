@@ -113,6 +113,9 @@ function hostFromFields(fields: Record<string, string>, devices: HardwareDevice[
         host.nicCount = nics;
     if (fields.probe_ver)
         host.probeVersion = fields.probe_ver;
+    const collectedAt = parseCollectedAt(fields.time);
+    if (collectedAt !== undefined)
+        host.collectedAt = collectedAt;
 
     if (host.vendor == null) {
         const board = devices.find(device => device.type === "motherboard" && device.vendor);
@@ -121,6 +124,19 @@ function hostFromFields(fields: Record<string, string>, devices: HardwareDevice[
     }
 
     return host;
+}
+
+export function parseCollectedAt(value: string | undefined): string | undefined {
+    if (value == null)
+        return undefined;
+    const trimmed = value.trim();
+    if (trimmed.length < 10 || trimmed.length > 64)
+        return undefined;
+    if (!/^\d{4}-\d{2}-\d{2} /.test(trimmed))
+        return undefined;
+    if (/[<>@]/.test(trimmed))
+        return undefined;
+    return trimmed;
 }
 
 export function buildSystemTitle(host: HostSummary): string | undefined {

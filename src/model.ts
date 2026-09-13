@@ -93,6 +93,7 @@ export interface HostSummary {
     monitorCount?: number | undefined;
     nicCount?: number | undefined;
     probeVersion?: string | undefined;
+    collectedAt?: string | undefined;
 }
 
 export interface HardwareDevice {
@@ -207,3 +208,32 @@ export interface HardwareFindingsSummary {
     secondaryUnconfirmed: HardwareFinding[];
     source: FindingSource;
 }
+
+export type UploadErrorKind =
+    | "administrative-access-required"
+    | "no-local-probe"
+    | "command-failed"
+    | "network-unavailable"
+    | "upstream-rejected"
+    | "timeout"
+    | "cancelled"
+    | "unknown";
+
+export interface UploadError {
+    kind: UploadErrorKind;
+    message: string;
+}
+
+export interface UploadResult {
+    url?: string | undefined;
+    probeId?: string | undefined;
+}
+
+export type UploadState =
+    | { status: "idle" }
+    | { status: "uploading"; startedAt: number }
+    | { status: "succeeded"; result: UploadResult }
+    | {
+        status: "failed";
+        error: UploadError;
+    };
