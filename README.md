@@ -39,7 +39,16 @@ That workflow is not implemented yet. v0.1 only answers whether `hw-probe` is in
 
 On Fedora and Bazzite, the tool package name is **`hw-probe`**. Fedora installs the executable at `/usr/bin/hw-probe`.
 
-This plugin does not install that package. If `hw-probe` is missing, the page reports that it is unavailable.
+The plugin also detects a normal per-user install at `~/.local/bin/hw-probe` for the authenticated Cockpit user. Cockpit's process PATH is not the same as an interactive login shell, so a tool that works in the terminal can still be invisible to `cockpit.spawn(["hw-probe", ...])` until that user-local path is tried.
+
+Detection order:
+
+1. `hw-probe` via Cockpit's normal process lookup
+2. if that executable is not found: `<authenticated-user-home>/.local/bin/hw-probe`
+
+Arbitrary custom install paths are not supported. Do not edit Cockpit's PATH as a workaround.
+
+This plugin does not install that package. If `hw-probe` is missing from both locations, the page reports that it is unavailable.
 
 ## Development
 
@@ -116,13 +125,13 @@ NODE_ENV=production npm run build
 
 2. Log into Cockpit and open **Hardware Probe**.
 
-3. If `hw-probe` is installed, compare the shown version with:
+3. If `hw-probe` is installed system-wide **or** at `~/.local/bin/hw-probe` for the logged-in user, compare the shown version with:
 
    ```bash
    hw-probe -dumpversion
    ```
 
-   They should match after trimming whitespace.
+   They should match after trimming whitespace. A user-local binary should be detected even when Cockpit's process PATH does not include `~/.local/bin`.
 
 4. Click **Refresh**. Only version detection should run again. No probe files should appear, and no network upload should occur.
 

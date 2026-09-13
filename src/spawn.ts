@@ -4,7 +4,9 @@
 
 import cockpit from 'cockpit';
 
-export const HW_PROBE_DUMPVERSION_ARGV = ["hw-probe", "-dumpversion"] as const;
+export const HW_PROBE_VERSION_ARGUMENT = "-dumpversion";
+
+export const HW_PROBE_DUMPVERSION_ARGV = ["hw-probe", HW_PROBE_VERSION_ARGUMENT] as const;
 
 export const CAPABILITY_TIMEOUT_MS = 8000;
 

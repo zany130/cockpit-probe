@@ -136,6 +136,12 @@ Verified against current `linuxhw/hw-probe` source (`hw-probe.pl` on `master`), 
 **Cockpit execution**
 
 - Use argv arrays only: `cockpit.spawn(["hw-probe", "-dumpversion"])`.
+- Cockpit process PATH is not the user's interactive shell PATH. A user-local install at `~/.local/bin/hw-probe` is therefore not found by name-only spawn.
+- v0.1 executable discovery:
+  1. `cockpit.spawn(["hw-probe", "-dumpversion"])` using Cockpit's normal process lookup
+  2. only on structured `problem === "not-found"`: read the authenticated user's home via `await cockpit.init()` then `cockpit.info.user.home` (current API since Cockpit 336; `cockpit.user()` is soft-deprecated), construct `<home>/.local/bin/hw-probe`, and spawn that absolute path with `-dumpversion`
+- Do not invent `/home/<username>`. If home lookup fails, report a controlled detection error.
+- Other PATH-lookup failures (permission denied, timeout, command-failed) must not fall back.
 - Documented spawn options do **not** include a process timeout field (`binary`, `directory`, `err`, `environ`, `pty`, `batch`, `latency`, `superuser`). The `"timeout"` value exists as a Cockpit problem code.
 - v0.1 applies a bounded timeout with a timer and `process.close("timeout")`, which terminates the spawned process and is normalized separately from command-not-found.
 - Missing executable: structured `problem === "not-found"` (do not key off English stderr such as “command not found”).
@@ -643,7 +649,9 @@ Implement:
 
 - Cockpit plugin scaffold
 - Hardware Probe page
-- `hw-probe` executable detection
+- `hw-probe` executable detection, including:
+  - normal Cockpit process PATH lookup of `hw-probe`
+  - authenticated-user fallback at `~/.local/bin/hw-probe`
 - installed version detection
 - normalized capability model
 - loading/error/unavailable/ready states

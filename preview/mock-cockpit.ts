@@ -62,6 +62,12 @@ function spawn(_args: string[]) {
 
 const cockpit = {
     gettext: (message: string) => message,
+    init: async () => undefined,
+    info: {
+        user: {
+            home: '/home/preview',
+        },
+    },
     spawn,
 };
 
