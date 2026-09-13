@@ -1,0 +1,22 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+@use "page.scss";
+
+.hw-probe-page {
+    max-width: 48rem;
+}
+
+.hw-probe-page .pf-v6-c-title {
+    margin-block-end: var(--pf-t--global--spacer--md);
+}
+
+.hw-probe-actions {
+    margin-block-end: var(--pf-t--global--spacer--md);
+}
+
+.hw-probe-version {
+    margin-block: var(--pf-t--global--spacer--md);
+}
+
+.hw-probe-status {
+    min-width: 0;
+}

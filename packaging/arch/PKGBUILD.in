@@ -1,0 +1,15 @@
+pkgname=cockpit-hardware-probe
+pkgver=VERSION
+pkgrel=1
+pkgdesc='Cockpit UI around hw-probe'
+arch=('x86_64')
+url='https://linux-hardware.org/'
+license=(LGPL)
+source=("SOURCE")
+sha256sums=('SKIP')
+
+package() {
+  depends=(cockpit)
+  cd $pkgname
+  make DESTDIR="$pkgdir" install PREFIX=/usr
+}

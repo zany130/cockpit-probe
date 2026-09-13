@@ -1,0 +1,22 @@
+#!/usr/bin/python3 -cimport os, sys; os.execv(os.path.dirname(sys.argv[1]) + "/common/pywrap", sys.argv)
+
+# Run this with --help to see available options for tracing and debugging
+# See https://github.com/cockpit-project/cockpit/blob/main/test/common/testlib.py
+# "class Browser" and "class MachineCase" for the available API.
+
+import testlib
+
+
+# Nondestructive tests all run in the same running VM. This allows them to run in Packit, Fedora, and
+# RHEL dist-git gating. They must not permanently change any file or configuration on the system in a
+# way that influences other tests.
+@testlib.nondestructive
+class TestApplication(testlib.MachineCase):
+    def testBasic(self):
+        b = self.browser
+
+        self.login_and_go("/hardware-probe")
+        b.wait_text("h1", "Hardware Probe")
+        b.wait_visible("button[aria-label='Refresh hardware probe detection']")
+        # v0.1 never exposes a working probe action.
+        b.wait_not_present("button:contains('Run probe')")

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="addon">
+  <id>org.cockpit_project.hardware_probe</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <name>Hardware Probe</name>
+  <summary>Detect whether hw-probe is installed in Cockpit</summary>
+  <description>
+    <p>
+      A Cockpit plugin that detects whether hw-probe is installed and reports
+      its version. Local hardware probing and upload are not included in v0.1.
+    </p>
+  </description>
+  <extends>org.cockpit_project.cockpit</extends>
+  <launchable type="cockpit-manifest">hardware-probe</launchable>
+  <url type="homepage">https://linux-hardware.org/</url>
+</component>
