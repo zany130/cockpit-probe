@@ -31,6 +31,26 @@ describe('CapabilityView', () => {
         expect(screen.queryByRole('button', { name: /run probe/i })).not.toBeInTheDocument();
     });
 
+    it('does not expose filesystem paths or Flatpak app ids in the available UI', () => {
+        render(
+            <CapabilityView
+                    status={{
+                        phase: 'ready',
+                        capability: {
+                            state: 'available',
+                            version: '1.6',
+                            source: 'flatpak',
+                        },
+                    }}
+                    onRefresh={() => {}}
+            />
+        );
+        expect(screen.getByText('1.6')).toBeInTheDocument();
+        expect(screen.queryByText(/org\.linux_hardware\.hw-probe/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/\.local\/bin\/hw-probe/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/\/usr\/bin\/hw-probe/)).not.toBeInTheDocument();
+    });
+
     it('shows the unavailable state without an install action', () => {
         render(
             <CapabilityView

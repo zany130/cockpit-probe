@@ -3,22 +3,30 @@
  */
 
 import type { HwProbeCapability, HwProbeError } from './model';
-import { cockpitUserHome, HW_PROBE_COMMAND_NAME, userLocalHwProbePath } from './executable';
+import {
+    cockpitUserHome,
+    dumpversionArgv,
+    FLATPAK_INFO_ARGV,
+    FLATPAK_INVOCATION,
+    PATH_DUMPVERSION_INVOCATION,
+    userLocalInvocation,
+    type HwProbeInvocation,
+    type NativeHwProbeInvocation,
+} from './executable';
 import { normalizeSpawnFailure, parseHwProbeVersion } from './parser';
 import {
     CAPABILITY_TIMEOUT_MS,
     cockpitSpawn,
     HW_PROBE_SPAWN_ENVIRON,
-    HW_PROBE_VERSION_ARGUMENT,
     spawnWithTimeout,
     type SpawnFn,
 } from './spawn';
 
 export type UserHomeLookup = () => Promise<string>;
 
-function dumpversionArgv(executable: string): string[] {
-    return [executable, HW_PROBE_VERSION_ARGUMENT];
-}
+type ProbeAttempt =
+    | { status: "missing" }
+    | { status: "done"; capability: HwProbeCapability };
 
 function fromNormalizedError(error: HwProbeError): HwProbeCapability {
     if (error.kind === "command-not-found")
@@ -40,11 +48,21 @@ function homeLookupError(): HwProbeCapability {
     };
 }
 
+function unavailableCapability(): HwProbeCapability {
+    return {
+        state: "unavailable",
+        error: {
+            kind: "command-not-found",
+            message: "hw-probe executable was not found",
+        },
+    };
+}
+
 async function queryDumpversion(
     spawn: SpawnFn,
-    executable: string
+    invocation: HwProbeInvocation
 ): Promise<HwProbeCapability> {
-    const stdout = await spawnWithTimeout(spawn, dumpversionArgv(executable), {
+    const stdout = await spawnWithTimeout(spawn, dumpversionArgv(invocation), {
         timeoutMs: CAPABILITY_TIMEOUT_MS,
         environ: HW_PROBE_SPAWN_ENVIRON,
     });
@@ -52,35 +70,91 @@ async function queryDumpversion(
     if (!parsed.ok)
         return { state: "error", error: parsed.error };
 
-    return { state: "available", version: parsed.version };
+    return {
+        state: "available",
+        version: parsed.version,
+        source: invocation.source,
+    };
+}
+
+async function tryNativeDumpversion(
+    spawn: SpawnFn,
+    invocation: NativeHwProbeInvocation
+): Promise<ProbeAttempt> {
+    try {
+        return { status: "done", capability: await queryDumpversion(spawn, invocation) };
+    } catch (error) {
+        const normalized = normalizeSpawnFailure(error);
+        if (normalized.kind === "command-not-found")
+            return { status: "missing" };
+        return { status: "done", capability: fromNormalizedError(normalized) };
+    }
+}
+
+async function tryFlatpakDumpversion(spawn: SpawnFn): Promise<ProbeAttempt> {
+    try {
+        await spawnWithTimeout(spawn, FLATPAK_INFO_ARGV, {
+            timeoutMs: CAPABILITY_TIMEOUT_MS,
+            environ: HW_PROBE_SPAWN_ENVIRON,
+        });
+    } catch (error) {
+        const normalized = normalizeSpawnFailure(error);
+        if (normalized.kind === "command-not-found" || normalized.kind === "command-failed")
+            return { status: "missing" };
+        return { status: "done", capability: fromNormalizedError(normalized) };
+    }
+
+    try {
+        return { status: "done", capability: await queryDumpversion(spawn, FLATPAK_INVOCATION) };
+    } catch (error) {
+        const normalized = normalizeSpawnFailure(error);
+        if (normalized.kind === "command-not-found") {
+            return {
+                status: "done",
+                capability: {
+                    state: "error",
+                    error: {
+                        kind: "command-failed",
+                        message: "hw-probe Flatpak is installed but failed to launch",
+                    },
+                },
+            };
+        }
+        return { status: "done", capability: fromNormalizedError(normalized) };
+    }
 }
 
 export async function detectHwProbeCapability(
     spawn: SpawnFn = cockpitSpawn,
     getUserHome: UserHomeLookup = cockpitUserHome
 ): Promise<HwProbeCapability> {
-    try {
-        return await queryDumpversion(spawn, HW_PROBE_COMMAND_NAME);
-    } catch (error) {
-        const normalized = normalizeSpawnFailure(error);
-        if (normalized.kind !== "command-not-found")
-            return fromNormalizedError(normalized);
-    }
+    // Discovery order: native PATH, then ~/.local/bin, then official Flatpak.
+    // Prefer native when both native and Flatpak installs exist. Do not fall
+    // back after permission-denied, timeout, or command-failed.
+    const pathAttempt = await tryNativeDumpversion(spawn, PATH_DUMPVERSION_INVOCATION);
+    if (pathAttempt.status === "done")
+        return pathAttempt.capability;
 
-    let home: string;
+    let homeFailed = false;
     try {
-        home = await getUserHome();
+        const invocation = userLocalInvocation(await getUserHome());
+        if (invocation == null) {
+            homeFailed = true;
+        } else {
+            const localAttempt = await tryNativeDumpversion(spawn, invocation);
+            if (localAttempt.status === "done")
+                return localAttempt.capability;
+        }
     } catch {
-        return homeLookupError();
+        homeFailed = true;
     }
 
-    const userLocalPath = userLocalHwProbePath(home);
-    if (userLocalPath == null)
+    const flatpakAttempt = await tryFlatpakDumpversion(spawn);
+    if (flatpakAttempt.status === "done")
+        return flatpakAttempt.capability;
+
+    if (homeFailed)
         return homeLookupError();
 
-    try {
-        return await queryDumpversion(spawn, userLocalPath);
-    } catch (error) {
-        return fromNormalizedError(normalizeSpawnFailure(error));
-    }
+    return unavailableCapability();
 }

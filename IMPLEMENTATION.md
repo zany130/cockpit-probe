@@ -135,19 +135,57 @@ Verified against current `linuxhw/hw-probe` source (`hw-probe.pl` on `master`), 
 
 **Cockpit execution**
 
-- Use argv arrays only: `cockpit.spawn(["hw-probe", "-dumpversion"])`.
+- Use argv arrays only. Never `sh -c`, `bash -c`, or `flatpak run ...` as a single string.
 - Cockpit process PATH is not the user's interactive shell PATH. A user-local install at `~/.local/bin/hw-probe` is therefore not found by name-only spawn.
-- v0.1 executable discovery:
+- v0.1 executable discovery, in this order, stopping at the first usable install:
   1. `cockpit.spawn(["hw-probe", "-dumpversion"])` using Cockpit's normal process lookup
   2. only on structured `problem === "not-found"`: read the authenticated user's home via `await cockpit.init()` then `cockpit.info.user.home` (current API since Cockpit 336; `cockpit.user()` is soft-deprecated), construct `<home>/.local/bin/hw-probe`, and spawn that absolute path with `-dumpversion`
-- Do not invent `/home/<username>`. If home lookup fails, report a controlled detection error.
-- Other PATH-lookup failures (permission denied, timeout, command-failed) must not fall back.
+  3. only after native PATH and user-local are both structured not-found (or home lookup cannot be used): official Flatpak `org.linux_hardware.hw-probe`
+- Prefer a native installation when both native and Flatpak versions exist.
+- Do not invent `/home/<username>`. If home lookup fails, skip the user-local path and still try Flatpak. If Flatpak is also missing, report a controlled home-lookup error rather than claiming hw-probe is not installed.
+- Other native-lookup failures (permission denied, timeout, command-failed) must not fall back.
+- Official Flatpak is an invocation, not a filesystem executable path:
+
+  ```ts
+  type HwProbeInvocation =
+      | { kind: "native"; executable: string; source: "native-path" | "user-local" }
+      | { kind: "flatpak"; executable: "flatpak"; appId: "org.linux_hardware.hw-probe"; source: "flatpak" };
+  ```
+
+- Flatpak detection uses documented CLI argv arrays:
+  1. determine whether `flatpak` itself is available by spawning `["flatpak", "info", "--show-ref", "org.linux_hardware.hw-probe"]`
+  2. treat exit 0 as “the app is installed” (user and system installations are queried by default; `--show-ref` is machine-readable)
+  3. treat structured `problem === "not-found"` as “Flatpak CLI missing”
+  4. treat a non-zero exit as “hw-probe Flatpak not installed”
+  5. only then run `["flatpak", "run", "org.linux_hardware.hw-probe", "-dumpversion"]`
+- Do not parse `flatpak list` human-readable tables. Do not launch the Flatpak merely to discover whether it is installed.
+- If the Flatpak CLI is missing, or the app is not installed, hw-probe is unavailable. If the app is installed but launch fails, report a command-failed/error state — not “hw-probe is not installed”.
+- The provider exposes the same normalized capability (`available`, `version`, error state) regardless of source. `source` is retained internally (`native-path` | `user-local` | `flatpak`) and is not required in the v0.1 UI. Do not expose filesystem paths in the normal UI.
 - Documented spawn options do **not** include a process timeout field (`binary`, `directory`, `err`, `environ`, `pty`, `batch`, `latency`, `superuser`). The `"timeout"` value exists as a Cockpit problem code.
 - v0.1 applies a bounded timeout with a timer and `process.close("timeout")`, which terminates the spawned process and is normalized separately from command-not-found.
 - Missing executable: structured `problem === "not-found"` (do not key off English stderr such as “command not found”).
 - Permission denied: structured `problem === "access-denied"`.
 - Generic failure: `problem === null` with a non-zero `exit_status`.
 - v0.1 uses `err: "ignore"` so stderr is not used to classify state. Locale is pinned with `LC_ALL=C` and `LANG=C` because version stdout is parsed.
+
+**Flatpak `-dumpversion` verification (2026-09-13)**
+
+Verified against current `linuxhw/hw-probe` `flatpak/hw-probe.sh` and `hw-probe.pl` on `master`, and against `flatpak-info(1)`.
+
+- Official application id: `org.linux_hardware.hw-probe`.
+- The Flatpak wrapper prepends `-flatpak` and forwards remaining arguments:
+
+  ```sh
+  perl /app/bin/hw-probe-flatpak -flatpak "$@"
+  ```
+
+  so `flatpak run org.linux_hardware.hw-probe -dumpversion` becomes `-flatpak -dumpversion`.
+- Getopt still defines both `flatpak!` and `dumpversion!`.
+- The no-argument / desktop `-all -upload` path runs only when `$#ARGV_COPY==0`, or when the only argument is `-flatpak`. Two arguments (`-flatpak`, `-dumpversion`) do not take that path.
+- `DumpVersion` prints `$TOOL_VERSION` plus a newline and exits 0 **before** any probe/upload work.
+- Therefore `-dumpversion` is a valid version query through the official Flatpak. Do not assume later Flatpak builds remain identical; re-verify before v0.2 probing.
+- Do not modify Flatpak permissions in v0.1. Do not install the Flatpak from this plugin.
+- v0.1 only detects capability/version. Do not assume the Flatpak has the same host hardware access as a native install. When v0.2 implements probing, independently verify sandbox permissions and access to `/sys`, `/proc`, PCI/USB enumeration, storage information, kernel logs, SMART/drive-health behavior, and privilege behavior. If Flatpak produces less complete data, surface that honestly.
 
 ---
 
@@ -652,17 +690,26 @@ Implement:
 - `hw-probe` executable detection, including:
   - normal Cockpit process PATH lookup of `hw-probe`
   - authenticated-user fallback at `~/.local/bin/hw-probe`
+  - official Flatpak `org.linux_hardware.hw-probe` via `flatpak run` (not a filesystem path)
 - installed version detection
-- normalized capability model
+- normalized capability model (`available` / version / error; source retained internally)
 - loading/error/unavailable/ready states
 - no probe execution yet
 - no upload
 - no privilege escalation
+- no Flatpak permission overrides or package installation
 
 Tests:
 
-- installed
-- missing
+- native PATH found (Flatpak discovery not used)
+- user-local found after PATH miss (Flatpak not used)
+- Flatpak found after PATH and user-local miss (`flatpak info --show-ref` then `flatpak run … -dumpversion`)
+- Flatpak CLI missing → unavailable
+- Flatpak present, app missing → unavailable
+- Flatpak app present but launch fails → command-failed/error, not missing
+- Flatpak malformed version → malformed-output
+- Flatpak timeout → timeout
+- full native → user-local → Flatpak fallback chain
 - version success
 - malformed version output
 - command failure
@@ -694,6 +741,8 @@ Implement:
 - no automatic privilege escalation
 
 The command must not include `-upload`.
+
+Do not assume a Flatpak install has identical host hardware access to a native install. Independently verify Flatpak sandbox permissions and access to `/sys`, `/proc`, PCI/USB enumeration, storage information, kernel logs, SMART/drive-health behavior, and privilege behavior. If Flatpak produces less complete data, surface that honestly rather than silently treating all installations as equivalent. Do not modify Flatpak permissions merely to make probing look complete.
 
 Tests:
 

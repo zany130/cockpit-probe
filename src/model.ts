@@ -22,8 +22,14 @@ export interface HwProbeError {
     message: string;
 }
 
+export type HwProbeSource =
+    | "native-path"
+    | "user-local"
+    | "flatpak";
+
 export interface HwProbeCapability {
     state: HwProbeState;
     version?: string;
+    source?: HwProbeSource;
     error?: HwProbeError;
 }

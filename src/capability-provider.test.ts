@@ -2,6 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { detectHwProbeCapability } from './capability-provider';
 import {
+    dumpversionArgv,
+    FLATPAK_INFO_ARGV,
+    FLATPAK_INVOCATION,
+    PATH_DUMPVERSION_INVOCATION,
+    userLocalInvocation,
+} from './executable';
+import {
     CAPABILITY_TIMEOUT_MS,
     HW_PROBE_DUMPVERSION_ARGV,
     HW_PROBE_SPAWN_ENVIRON,
@@ -32,11 +39,34 @@ function notFoundError() {
     return { problem: 'not-found', exit_status: null, exit_signal: null, message: '' };
 }
 
+function accessDeniedError() {
+    return { problem: 'access-denied', exit_status: null, exit_signal: null, message: '' };
+}
+
+function commandFailedError(exitStatus = 1) {
+    return { problem: null, exit_status: exitStatus, exit_signal: null, message: '' };
+}
+
+function argvKey(args: readonly string[]): string {
+    return JSON.stringify([...args]);
+}
+
+const PATH_DUMPVERSION_ARGV = dumpversionArgv(PATH_DUMPVERSION_INVOCATION);
+const USER_LOCAL_HOME = '/home/testuser';
+const USER_LOCAL_INVOCATION = userLocalInvocation(USER_LOCAL_HOME);
+if (USER_LOCAL_INVOCATION == null)
+    throw new Error('test fixture: user-local invocation must be constructible');
+const USER_LOCAL_DUMPVERSION_ARGV = dumpversionArgv(USER_LOCAL_INVOCATION);
+const FLATPAK_DUMPVERSION_ARGV = dumpversionArgv(FLATPAK_INVOCATION);
+
+type FakeOutcome = { stdout?: string; error?: unknown; hang?: boolean };
+
 function fakeSpawn(options: {
     stdout?: string;
     error?: unknown;
     hang?: boolean;
-    byExecutable?: Record<string, { stdout?: string; error?: unknown }>;
+    byExecutable?: Record<string, FakeOutcome>;
+    byArgv?: Record<string, FakeOutcome>;
 }): { spawn: SpawnFn; close: ReturnType<typeof vi.fn>; calls: Array<{ args: string[]; spawnOptions?: object }> } {
     const close = vi.fn();
     const calls: Array<{ args: string[]; spawnOptions?: object }> = [];
@@ -47,11 +77,14 @@ function fakeSpawn(options: {
             call.spawnOptions = spawnOptions;
         calls.push(call);
         const result = deferred<string>();
-        const selected = options.byExecutable?.[args[0]] ?? {
-            stdout: options.stdout,
-            error: options.error,
-        };
-        if (!options.hang) {
+        const selected = options.byArgv?.[argvKey(args)] ??
+                (args[0] !== undefined ? options.byExecutable?.[args[0]] : undefined) ??
+                {
+                    stdout: options.stdout,
+                    error: options.error,
+                    hang: options.hang,
+                };
+        if (!selected.hang) {
             if (selected.error !== undefined)
                 queueMicrotask(() => result.reject(selected.error));
             else
@@ -66,16 +99,35 @@ function fakeSpawn(options: {
     return { spawn, close, calls };
 }
 
+function nativeAndUserLocalMissing(flatpak: Record<string, FakeOutcome> = {}): Record<string, FakeOutcome> {
+    return {
+        [argvKey(PATH_DUMPVERSION_ARGV)]: { error: notFoundError() },
+        [argvKey(USER_LOCAL_DUMPVERSION_ARGV)]: { error: notFoundError() },
+        ...flatpak,
+    };
+}
+
+function expectNoShell(calls: Array<{ args: string[] }>) {
+    for (const call of calls) {
+        expect(call.args).not.toEqual(expect.arrayContaining(['sh', '-c']));
+        expect(call.args).not.toEqual(expect.arrayContaining(['bash', '-c']));
+        expect(call.args.join(' ')).not.toContain('-upload');
+        expect(call.args.join(' ')).not.toContain('-all');
+        expect(call.args.join(' ')).not.toContain('-check');
+    }
+}
+
 afterEach(() => {
     vi.useRealTimers();
 });
 
 describe('detectHwProbeCapability', () => {
-    it('returns available with a normalized version', async () => {
+    it('returns available with a normalized version from PATH', async () => {
         const { spawn, calls } = fakeSpawn({ stdout: '1.6.6' });
         await expect(detectHwProbeCapability(spawn)).resolves.toEqual({
             state: 'available',
             version: '1.6.6',
+            source: 'native-path',
         });
         expect(calls[0].args).toEqual([...HW_PROBE_DUMPVERSION_ARGV]);
         expect(calls[0].spawnOptions).toEqual({
@@ -89,6 +141,7 @@ describe('detectHwProbeCapability', () => {
         await expect(detectHwProbeCapability(spawn)).resolves.toEqual({
             state: 'available',
             version: '1.6.6',
+            source: 'native-path',
         });
     });
 
@@ -111,11 +164,13 @@ describe('detectHwProbeCapability', () => {
         });
     });
 
-    it('returns unavailable when PATH and user-local executables are missing', async () => {
+    it('returns unavailable when PATH, user-local, and Flatpak are all missing', async () => {
         const { spawn, calls } = fakeSpawn({
-            error: notFoundError(),
+            byArgv: nativeAndUserLocalMissing({
+                [argvKey(FLATPAK_INFO_ARGV)]: { error: notFoundError() },
+            }),
         });
-        await expect(detectHwProbeCapability(spawn, async () => '/home/testuser')).resolves.toEqual({
+        await expect(detectHwProbeCapability(spawn, async () => USER_LOCAL_HOME)).resolves.toEqual({
             state: 'unavailable',
             error: {
                 kind: 'command-not-found',
@@ -123,14 +178,17 @@ describe('detectHwProbeCapability', () => {
             },
         });
         expect(calls.map(call => call.args)).toEqual([
-            ['hw-probe', '-dumpversion'],
-            ['/home/testuser/.local/bin/hw-probe', '-dumpversion'],
+            PATH_DUMPVERSION_ARGV,
+            USER_LOCAL_DUMPVERSION_ARGV,
+            [...FLATPAK_INFO_ARGV],
         ]);
+        expect(calls.some(call => call.args.join(' ') === FLATPAK_DUMPVERSION_ARGV.join(' '))).toBe(false);
+        expectNoShell(calls);
     });
 
     it('does not fall back when PATH lookup is permission-denied', async () => {
         const { spawn, calls } = fakeSpawn({
-            error: { problem: 'access-denied', exit_status: null, exit_signal: null, message: '' },
+            error: accessDeniedError(),
         });
         await expect(detectHwProbeCapability(spawn)).resolves.toEqual({
             state: 'permission-denied',
@@ -140,12 +198,12 @@ describe('detectHwProbeCapability', () => {
             },
         });
         expect(calls).toHaveLength(1);
-        expect(calls[0].args).toEqual(['hw-probe', '-dumpversion']);
+        expect(calls[0].args).toEqual(PATH_DUMPVERSION_ARGV);
     });
 
     it('returns command-failed for a generic non-zero exit', async () => {
         const { spawn, calls } = fakeSpawn({
-            error: { problem: null, exit_status: 1, exit_signal: null, message: '' },
+            error: commandFailedError(1),
         });
         await expect(detectHwProbeCapability(spawn)).resolves.toEqual({
             state: 'error',
@@ -177,49 +235,51 @@ describe('detectHwProbeCapability', () => {
         const { spawn, calls } = fakeSpawn({ stdout: '1.6\n' });
         await detectHwProbeCapability(spawn);
         expect(calls).toHaveLength(1);
-        expect(calls[0].args).toEqual(['hw-probe', '-dumpversion']);
-        expect(calls[0].args.join(' ')).not.toContain('-upload');
-        expect(calls[0].args.join(' ')).not.toContain('-all');
-        expect(calls[0].args.join(' ')).not.toContain('-check');
+        expect(calls[0].args).toEqual(PATH_DUMPVERSION_ARGV);
+        expectNoShell(calls);
     });
 
     it('does not require fallback when PATH lookup succeeds', async () => {
-        const getUserHome = vi.fn(async () => '/home/testuser');
+        const getUserHome = vi.fn(async () => USER_LOCAL_HOME);
         const { spawn, calls } = fakeSpawn({ stdout: '1.6.6' });
         await expect(detectHwProbeCapability(spawn, getUserHome)).resolves.toEqual({
             state: 'available',
             version: '1.6.6',
+            source: 'native-path',
         });
         expect(getUserHome).not.toHaveBeenCalled();
         expect(calls).toHaveLength(1);
-        expect(calls[0].args).toEqual(['hw-probe', '-dumpversion']);
+        expect(calls[0].args).toEqual(PATH_DUMPVERSION_ARGV);
+        expect(calls.some(call => call.args[0] === 'flatpak')).toBe(false);
     });
 
     it('falls back to ~/.local/bin/hw-probe after PATH command-not-found', async () => {
         const { spawn, calls } = fakeSpawn({
-            byExecutable: {
-                'hw-probe': { error: notFoundError() },
-                '/home/testuser/.local/bin/hw-probe': { stdout: '1.6.6' },
+            byArgv: {
+                [argvKey(PATH_DUMPVERSION_ARGV)]: { error: notFoundError() },
+                [argvKey(USER_LOCAL_DUMPVERSION_ARGV)]: { stdout: '1.6.6' },
             },
         });
-        await expect(detectHwProbeCapability(spawn, async () => '/home/testuser')).resolves.toEqual({
+        await expect(detectHwProbeCapability(spawn, async () => USER_LOCAL_HOME)).resolves.toEqual({
             state: 'available',
             version: '1.6.6',
+            source: 'user-local',
         });
         expect(calls.map(call => call.args)).toEqual([
-            ['hw-probe', '-dumpversion'],
-            ['/home/testuser/.local/bin/hw-probe', '-dumpversion'],
+            PATH_DUMPVERSION_ARGV,
+            USER_LOCAL_DUMPVERSION_ARGV,
         ]);
+        expect(calls.some(call => call.args[0] === 'flatpak')).toBe(false);
     });
 
     it('reports malformed-output from the user-local executable', async () => {
         const { spawn } = fakeSpawn({
-            byExecutable: {
-                'hw-probe': { error: notFoundError() },
-                '/home/testuser/.local/bin/hw-probe': { stdout: '' },
+            byArgv: {
+                [argvKey(PATH_DUMPVERSION_ARGV)]: { error: notFoundError() },
+                [argvKey(USER_LOCAL_DUMPVERSION_ARGV)]: { stdout: '' },
             },
         });
-        await expect(detectHwProbeCapability(spawn, async () => '/home/testuser')).resolves.toEqual({
+        await expect(detectHwProbeCapability(spawn, async () => USER_LOCAL_HOME)).resolves.toEqual({
             state: 'error',
             error: {
                 kind: 'malformed-output',
@@ -228,27 +288,33 @@ describe('detectHwProbeCapability', () => {
         });
     });
 
-    it('reports permission-denied from the user-local executable', async () => {
-        const { spawn } = fakeSpawn({
-            byExecutable: {
-                'hw-probe': { error: notFoundError() },
-                '/home/testuser/.local/bin/hw-probe': {
-                    error: { problem: 'access-denied', exit_status: null, exit_signal: null, message: '' },
-                },
+    it('reports permission-denied from the user-local executable without trying Flatpak', async () => {
+        const { spawn, calls } = fakeSpawn({
+            byArgv: {
+                [argvKey(PATH_DUMPVERSION_ARGV)]: { error: notFoundError() },
+                [argvKey(USER_LOCAL_DUMPVERSION_ARGV)]: { error: accessDeniedError() },
             },
         });
-        await expect(detectHwProbeCapability(spawn, async () => '/home/testuser')).resolves.toEqual({
+        await expect(detectHwProbeCapability(spawn, async () => USER_LOCAL_HOME)).resolves.toEqual({
             state: 'permission-denied',
             error: {
                 kind: 'permission-denied',
                 message: 'execution of hw-probe was denied',
             },
         });
+        expect(calls.map(call => call.args)).toEqual([
+            PATH_DUMPVERSION_ARGV,
+            USER_LOCAL_DUMPVERSION_ARGV,
+        ]);
+        expect(calls.some(call => call.args[0] === 'flatpak')).toBe(false);
     });
 
-    it('returns a controlled error when user-home lookup fails', async () => {
+    it('still tries Flatpak when user-home lookup fails, then reports the home error if Flatpak is also missing', async () => {
         const { spawn, calls } = fakeSpawn({
-            error: notFoundError(),
+            byArgv: {
+                [argvKey(PATH_DUMPVERSION_ARGV)]: { error: notFoundError() },
+                [argvKey(FLATPAK_INFO_ARGV)]: { error: notFoundError() },
+            },
         });
         await expect(detectHwProbeCapability(spawn, async () => {
             throw new Error('no user info');
@@ -259,19 +325,208 @@ describe('detectHwProbeCapability', () => {
                 message: 'authenticated user home directory is unavailable',
             },
         });
-        expect(calls).toHaveLength(1);
-        expect(calls[0].args).toEqual(['hw-probe', '-dumpversion']);
+        expect(calls.map(call => call.args)).toEqual([
+            PATH_DUMPVERSION_ARGV,
+            [...FLATPAK_INFO_ARGV],
+        ]);
     });
 
-    it('returns a controlled error when the home directory is invalid', async () => {
-        const { spawn } = fakeSpawn({
-            error: notFoundError(),
+    it('returns a controlled error when the home directory is invalid and Flatpak is missing', async () => {
+        const { spawn, calls } = fakeSpawn({
+            byArgv: {
+                [argvKey(PATH_DUMPVERSION_ARGV)]: { error: notFoundError() },
+                [argvKey(FLATPAK_INFO_ARGV)]: { error: commandFailedError(1) },
+            },
         });
         await expect(detectHwProbeCapability(spawn, async () => '../not-a-home')).resolves.toEqual({
             state: 'error',
             error: {
                 kind: 'unknown',
                 message: 'authenticated user home directory is unavailable',
+            },
+        });
+        expect(calls.map(call => call.args)).toEqual([
+            PATH_DUMPVERSION_ARGV,
+            [...FLATPAK_INFO_ARGV],
+        ]);
+    });
+
+    it('uses Flatpak when home lookup fails but the official Flatpak is installed', async () => {
+        const { spawn, calls } = fakeSpawn({
+            byArgv: {
+                [argvKey(PATH_DUMPVERSION_ARGV)]: { error: notFoundError() },
+                [argvKey(FLATPAK_INFO_ARGV)]: { stdout: 'app/org.linux_hardware.hw-probe/x86_64/stable\n' },
+                [argvKey(FLATPAK_DUMPVERSION_ARGV)]: { stdout: '1.6\n' },
+            },
+        });
+        await expect(detectHwProbeCapability(spawn, async () => {
+            throw new Error('no user info');
+        })).resolves.toEqual({
+            state: 'available',
+            version: '1.6',
+            source: 'flatpak',
+        });
+        expect(calls.map(call => call.args)).toEqual([
+            PATH_DUMPVERSION_ARGV,
+            [...FLATPAK_INFO_ARGV],
+            FLATPAK_DUMPVERSION_ARGV,
+        ]);
+    });
+
+    it('discovers the official Flatpak after native PATH and user-local lookups fail', async () => {
+        const { spawn, calls } = fakeSpawn({
+            byArgv: nativeAndUserLocalMissing({
+                [argvKey(FLATPAK_INFO_ARGV)]: { stdout: 'app/org.linux_hardware.hw-probe/x86_64/stable\n' },
+                [argvKey(FLATPAK_DUMPVERSION_ARGV)]: { stdout: '1.6\n' },
+            }),
+        });
+        await expect(detectHwProbeCapability(spawn, async () => USER_LOCAL_HOME)).resolves.toEqual({
+            state: 'available',
+            version: '1.6',
+            source: 'flatpak',
+        });
+        expect(calls.map(call => call.args)).toEqual([
+            PATH_DUMPVERSION_ARGV,
+            USER_LOCAL_DUMPVERSION_ARGV,
+            [...FLATPAK_INFO_ARGV],
+            FLATPAK_DUMPVERSION_ARGV,
+        ]);
+        expect(calls[3].spawnOptions).toEqual({
+            err: 'ignore',
+            environ: [...HW_PROBE_SPAWN_ENVIRON],
+        });
+        expectNoShell(calls);
+    });
+
+    it('returns unavailable when Flatpak itself is missing', async () => {
+        const { spawn, calls } = fakeSpawn({
+            byArgv: nativeAndUserLocalMissing({
+                [argvKey(FLATPAK_INFO_ARGV)]: { error: notFoundError() },
+            }),
+        });
+        await expect(detectHwProbeCapability(spawn, async () => USER_LOCAL_HOME)).resolves.toEqual({
+            state: 'unavailable',
+            error: {
+                kind: 'command-not-found',
+                message: 'hw-probe executable was not found',
+            },
+        });
+        expect(calls.map(call => call.args)).toEqual([
+            PATH_DUMPVERSION_ARGV,
+            USER_LOCAL_DUMPVERSION_ARGV,
+            [...FLATPAK_INFO_ARGV],
+        ]);
+        expect(calls.some(call => call.args.join(' ') === FLATPAK_DUMPVERSION_ARGV.join(' '))).toBe(false);
+    });
+
+    it('returns unavailable when Flatpak is present but the hw-probe app is not installed', async () => {
+        const { spawn, calls } = fakeSpawn({
+            byArgv: nativeAndUserLocalMissing({
+                [argvKey(FLATPAK_INFO_ARGV)]: { error: commandFailedError(1) },
+            }),
+        });
+        await expect(detectHwProbeCapability(spawn, async () => USER_LOCAL_HOME)).resolves.toEqual({
+            state: 'unavailable',
+            error: {
+                kind: 'command-not-found',
+                message: 'hw-probe executable was not found',
+            },
+        });
+        expect(calls.map(call => call.args)).toEqual([
+            PATH_DUMPVERSION_ARGV,
+            USER_LOCAL_DUMPVERSION_ARGV,
+            [...FLATPAK_INFO_ARGV],
+        ]);
+        expect(calls.some(call => call.args.join(' ') === FLATPAK_DUMPVERSION_ARGV.join(' '))).toBe(false);
+    });
+
+    it('reports command-failed when the Flatpak app is installed but launch fails', async () => {
+        const { spawn, calls } = fakeSpawn({
+            byArgv: nativeAndUserLocalMissing({
+                [argvKey(FLATPAK_INFO_ARGV)]: { stdout: 'app/org.linux_hardware.hw-probe/x86_64/stable\n' },
+                [argvKey(FLATPAK_DUMPVERSION_ARGV)]: { error: commandFailedError(1) },
+            }),
+        });
+        await expect(detectHwProbeCapability(spawn, async () => USER_LOCAL_HOME)).resolves.toEqual({
+            state: 'error',
+            error: {
+                kind: 'command-failed',
+                message: 'hw-probe exited with status 1',
+            },
+        });
+        expect(calls.map(call => call.args)).toEqual([
+            PATH_DUMPVERSION_ARGV,
+            USER_LOCAL_DUMPVERSION_ARGV,
+            [...FLATPAK_INFO_ARGV],
+            FLATPAK_DUMPVERSION_ARGV,
+        ]);
+    });
+
+    it('does not classify a post-install Flatpak not-found as missing', async () => {
+        const { spawn } = fakeSpawn({
+            byArgv: nativeAndUserLocalMissing({
+                [argvKey(FLATPAK_INFO_ARGV)]: { stdout: 'app/org.linux_hardware.hw-probe/x86_64/stable\n' },
+                [argvKey(FLATPAK_DUMPVERSION_ARGV)]: { error: notFoundError() },
+            }),
+        });
+        await expect(detectHwProbeCapability(spawn, async () => USER_LOCAL_HOME)).resolves.toEqual({
+            state: 'error',
+            error: {
+                kind: 'command-failed',
+                message: 'hw-probe Flatpak is installed but failed to launch',
+            },
+        });
+    });
+
+    it('reports malformed-output from the Flatpak version query', async () => {
+        const { spawn } = fakeSpawn({
+            byArgv: nativeAndUserLocalMissing({
+                [argvKey(FLATPAK_INFO_ARGV)]: { stdout: 'app/org.linux_hardware.hw-probe/x86_64/stable\n' },
+                [argvKey(FLATPAK_DUMPVERSION_ARGV)]: { stdout: 'Probe for hardware ... Ok\n' },
+            }),
+        });
+        await expect(detectHwProbeCapability(spawn, async () => USER_LOCAL_HOME)).resolves.toEqual({
+            state: 'error',
+            error: {
+                kind: 'malformed-output',
+                message: 'hw-probe version output was malformed',
+            },
+        });
+    });
+
+    it('reports timeout from the Flatpak version query', async () => {
+        vi.useFakeTimers();
+        const { spawn, close } = fakeSpawn({
+            byArgv: nativeAndUserLocalMissing({
+                [argvKey(FLATPAK_INFO_ARGV)]: { stdout: 'app/org.linux_hardware.hw-probe/x86_64/stable\n' },
+                [argvKey(FLATPAK_DUMPVERSION_ARGV)]: { hang: true },
+            }),
+        });
+        const pending = detectHwProbeCapability(spawn, async () => USER_LOCAL_HOME);
+        const expectTimeout = expect(pending).resolves.toEqual({
+            state: 'timeout',
+            error: {
+                kind: 'timeout',
+                message: 'hw-probe version query timed out',
+            },
+        });
+        await vi.advanceTimersByTimeAsync(CAPABILITY_TIMEOUT_MS);
+        await expectTimeout;
+        expect(close).toHaveBeenCalledWith('timeout');
+    });
+
+    it('reports permission-denied from the Flatpak version query', async () => {
+        const { spawn } = fakeSpawn({
+            byArgv: nativeAndUserLocalMissing({
+                [argvKey(FLATPAK_INFO_ARGV)]: { stdout: 'app/org.linux_hardware.hw-probe/x86_64/stable\n' },
+                [argvKey(FLATPAK_DUMPVERSION_ARGV)]: { error: accessDeniedError() },
+            }),
+        });
+        await expect(detectHwProbeCapability(spawn, async () => USER_LOCAL_HOME)).resolves.toEqual({
+            state: 'permission-denied',
+            error: {
+                kind: 'permission-denied',
+                message: 'execution of hw-probe was denied',
             },
         });
     });

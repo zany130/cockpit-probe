@@ -4,7 +4,7 @@
 
 import cockpit from 'cockpit';
 
-export const HW_PROBE_VERSION_ARGUMENT = "-dumpversion";
+import { HW_PROBE_VERSION_ARGUMENT } from './executable';
 
 export const HW_PROBE_DUMPVERSION_ARGV = ["hw-probe", HW_PROBE_VERSION_ARGUMENT] as const;
 
