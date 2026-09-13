@@ -121,6 +121,16 @@ NODE_ENV=production npm run build
 
 `make check` is the optional Cockpit VM integration test from the Starter Kit. It is not required for v0.6 unit validation. The plugin does not run `hw-probe -check`.
 
+### Browser preview (mocked Cockpit)
+
+This environment cannot open a real Cockpit session. A local mock server stands in for UI review:
+
+```bash
+PREVIEW_PORT=43173 npm run preview
+```
+
+Open `http://127.0.0.1:43173/`. Query `?state=` selects a mock: `available` (default native), `empty-inventory`, `findings-problems`, `admin-denied`, `flatpak` (unprivileged Flatpak completeness), and the older capability-error states. Nothing in this preview talks to linux-hardware.org.
+
 ## Real-host verification (Bazzite / Fedora)
 
 This plugin was implemented and unit-tested in a Chromebook Linux container. It has **not** been marked as passing the Bazzite real-host gate from this environment.

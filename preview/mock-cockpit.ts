@@ -9,7 +9,8 @@ type MockState =
     | 'loading'
     | 'admin-denied'
     | 'empty-inventory'
-    | 'findings-problems';
+    | 'findings-problems'
+    | 'flatpak';
 
 let probed = false;
 
@@ -24,12 +25,13 @@ function currentState(): MockState {
             value === 'loading' ||
             value === 'admin-denied' ||
             value === 'empty-inventory' ||
-            value === 'findings-problems')
+            value === 'findings-problems' ||
+            value === 'flatpak')
         return value;
     return 'available';
 }
 
-function spawn(args: string[]) {
+function spawn(args: string[], options?: { superuser?: string }) {
     const state = currentState();
     let close = (_problem?: string) => {};
 
@@ -58,7 +60,20 @@ function spawn(args: string[]) {
         const delay = args.includes('-all') ? 600 : 250;
 
         window.setTimeout(() => {
-            if (state === 'available' || state === 'admin-denied' || state === 'empty-inventory' || state === 'findings-problems') {
+            if (state === 'available' || state === 'admin-denied' || state === 'empty-inventory' || state === 'findings-problems' || state === 'flatpak') {
+                if (state === 'flatpak' && args[0] !== 'flatpak') {
+                    reject({ problem: 'not-found', exit_status: null, exit_signal: null, message: '' });
+                    return;
+                }
+                if (state === 'flatpak' && options?.superuser === 'require') {
+                    reject({
+                        problem: 'access-denied',
+                        exit_status: null,
+                        exit_signal: null,
+                        message: 'flatpak mock must stay unprivileged',
+                    });
+                    return;
+                }
                 if (args.includes('-all')) {
                     if (state === 'admin-denied') {
                         reject({ problem: 'access-denied', exit_status: null, exit_signal: null, message: '' });
@@ -114,6 +129,10 @@ function file(path: string, options?: { superuser?: string }) {
         read: async () => {
             if (state === 'admin-denied' && options?.superuser === 'require') {
                 const error = { problem: 'access-denied', message: '' };
+                throw error;
+            }
+            if (state === 'flatpak' && options?.superuser === 'require') {
+                const error = { problem: 'access-denied', message: 'flatpak mock must stay unprivileged' };
                 throw error;
             }
             if (state === 'empty-inventory' && !probed)
