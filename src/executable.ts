@@ -47,7 +47,7 @@ export const FLATPAK_INFO_ARGV = [
 
 const USER_LOCAL_SUFFIX = "/.local/bin/hw-probe";
 
-export function userLocalHwProbePath(home: string): string | null {
+export function normalizeAuthenticatedHome(home: string): string | null {
     if (typeof home !== "string")
         return null;
 
@@ -59,7 +59,13 @@ export function userLocalHwProbePath(home: string): string | null {
     if (parts.some(part => part === "." || part === ".."))
         return null;
 
-    const normalizedHome = "/" + parts.join("/");
+    return "/" + parts.join("/");
+}
+
+export function userLocalHwProbePath(home: string): string | null {
+    const normalizedHome = normalizeAuthenticatedHome(home);
+    if (normalizedHome == null)
+        return null;
     return normalizedHome + USER_LOCAL_SUFFIX;
 }
 

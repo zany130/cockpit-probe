@@ -10,6 +10,7 @@ import {
     PATH_DUMPVERSION_INVOCATION,
     buildLocalProbeArgv,
     isUploadArgument,
+    normalizeAuthenticatedHome,
     userLocalHwProbePath,
     userLocalInvocation,
 } from './executable';
@@ -40,6 +41,16 @@ describe('userLocalHwProbePath', () => {
     it('rejects an empty home directory', () => {
         expect(userLocalHwProbePath('')).toBeNull();
         expect(userLocalHwProbePath('   ')).toBeNull();
+    });
+});
+
+describe('normalizeAuthenticatedHome', () => {
+    it('normalizes a trailing slash', () => {
+        expect(normalizeAuthenticatedHome('/home/testuser/')).toBe('/home/testuser');
+    });
+
+    it('rejects traversal', () => {
+        expect(normalizeAuthenticatedHome('/home/testuser/../other')).toBeNull();
     });
 });
 

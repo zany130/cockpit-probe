@@ -21,7 +21,8 @@ import { CubesIcon } from '@patternfly/react-icons';
 
 import cockpit from 'cockpit';
 
-import type { HwProbeCapability, HwProbeSource, ProbeExecutionState } from './model';
+import type { HwProbeCapability, HwProbeSource, InventoryState, ProbeExecutionState } from './model';
+import { HardwareSummaryView } from './hardware-summary-view';
 import { ProbeExecutionView } from './probe-execution-view';
 
 const _ = cockpit.gettext;
@@ -36,6 +37,7 @@ interface CapabilityViewProps {
     execution?: ProbeExecutionState | undefined;
     onRunProbe?: (() => void) | undefined;
     onCancelProbe?: (() => void) | undefined;
+    inventory?: InventoryState | undefined;
 }
 
 export const CapabilityView = ({
@@ -44,6 +46,7 @@ export const CapabilityView = ({
     execution,
     onRunProbe,
     onCancelProbe,
+    inventory,
 }: CapabilityViewProps) => {
     const loading = status.phase === "loading";
 
@@ -73,6 +76,7 @@ export const CapabilityView = ({
                         execution={execution}
                         onRunProbe={onRunProbe}
                         onCancelProbe={onCancelProbe}
+                        inventory={inventory}
                 />
             )}
         </div>
@@ -93,12 +97,14 @@ const ReadyStatus = ({
     execution,
     onRunProbe,
     onCancelProbe,
+    inventory,
 }: {
     capability: HwProbeCapability;
     onRefresh: () => void;
     execution?: ProbeExecutionState | undefined;
     onRunProbe?: (() => void) | undefined;
     onCancelProbe?: (() => void) | undefined;
+    inventory?: InventoryState | undefined;
 }) => {
     switch (capability.state) {
     case "available":
@@ -109,6 +115,7 @@ const ReadyStatus = ({
                     execution={execution ?? { status: "idle" }}
                     onRunProbe={onRunProbe}
                     onCancelProbe={onCancelProbe}
+                    inventory={inventory}
             />
         );
     case "unavailable":
@@ -151,37 +158,48 @@ const AvailableStatus = ({
     execution,
     onRunProbe,
     onCancelProbe,
+    inventory,
 }: {
     version: string | null;
     source?: HwProbeSource | undefined;
     execution: ProbeExecutionState;
     onRunProbe?: (() => void) | undefined;
     onCancelProbe?: (() => void) | undefined;
-}) => (
-    <div className="hw-probe-available">
-        <EmptyState titleText={_("hw-probe is available")} headingLevel="h2">
-            <EmptyStateBody>
-                <p>{_("Hardware probing is ready on this system.")}</p>
-                {version !== null && (
-                    <DescriptionList isHorizontal className="hw-probe-version">
-                        <DescriptionListGroup>
-                            <DescriptionListTerm>{_("Version")}</DescriptionListTerm>
-                            <DescriptionListDescription>{version}</DescriptionListDescription>
-                        </DescriptionListGroup>
-                    </DescriptionList>
-                )}
-            </EmptyStateBody>
-        </EmptyState>
-        {onRunProbe && onCancelProbe && (
-            <ProbeExecutionView
-                    execution={execution}
-                    onRun={onRunProbe}
-                    onCancel={onCancelProbe}
-                    backend={source === "flatpak" ? "flatpak" : "native"}
-            />
-        )}
-    </div>
-);
+    inventory?: InventoryState | undefined;
+}) => {
+    const backend = source === "flatpak" ? "flatpak" : "native";
+    const hideIdleExecution = inventory?.status === "empty" && execution.status === "idle";
+    const compactRun = inventory?.status === "ready";
+
+    return (
+        <div className="hw-probe-available">
+            {version !== null && (
+                <DescriptionList isHorizontal className="hw-probe-version">
+                    <DescriptionListGroup>
+                        <DescriptionListTerm>{_("hw-probe")}</DescriptionListTerm>
+                        <DescriptionListDescription>{version}</DescriptionListDescription>
+                    </DescriptionListGroup>
+                </DescriptionList>
+            )}
+            {inventory && (
+                <HardwareSummaryView
+                        inventory={inventory}
+                        onRunProbe={onRunProbe}
+                        probeRunning={execution.status === "running"}
+                />
+            )}
+            {onRunProbe && onCancelProbe && !hideIdleExecution && (
+                <ProbeExecutionView
+                        execution={execution}
+                        onRun={onRunProbe}
+                        onCancel={onCancelProbe}
+                        backend={backend}
+                        compact={compactRun}
+                />
+            )}
+        </div>
+    );
+};
 
 const UnavailableStatus = () => (
     <EmptyState

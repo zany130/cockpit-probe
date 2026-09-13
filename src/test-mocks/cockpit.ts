@@ -13,6 +13,9 @@ const cockpit = {
     spawn: () => {
         throw new Error('cockpit.spawn is not available in unit tests; inject a spawn function');
     },
+    file: () => {
+        throw new Error('cockpit.file is not available in unit tests; inject a file reader');
+    },
 };
 
 export default cockpit;

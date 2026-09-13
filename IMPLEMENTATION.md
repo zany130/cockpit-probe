@@ -211,7 +211,7 @@ Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master`, current `
 - Default `PROBE_DIR` is `/root/HW_PROBE` (help: “Probes info is saved in the $PROBE_DIR directory”). `LATEST_DIR` is `$PROBE_DIR/LATEST`. Observed success stdout includes `Local probe path: $DATA_DIR` (typically `/root/HW_PROBE/LATEST/hw.info` when run as root).
 - Snap uses `$SNAP_USER_COMMON/HW_PROBE`. Flatpak uses `$XDG_DATA_HOME/HW_PROBE` (commonly `~/.var/app/org.linux_hardware.hw-probe/data/HW_PROBE`).
 - A new probe `rmtree`s existing `$DATA_DIR` then writes `LATEST`. v0.2 does not delete or relocate probes itself. Cancellation via SIGTERM may leave a partial `LATEST` tree; do not auto-clean.
-- v0.3 will need to read files beneath `/root/HW_PROBE` for native privileged probes. That requires a narrowly scoped privileged read. v0.2 does not implement that read, copy probe data into the Cockpit user's home, or manage history.
+- v0.3 reads only the two trusted files under `/root/HW_PROBE/LATEST/hw.info/{host,devices}` (see §4.3). v0.2 does not implement that read, copy probe data into the Cockpit user's home, or manage history.
 
 **Completion**
 
@@ -236,6 +236,74 @@ Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master`, current `
 **Timeout**
 
 - Upstream documents about one minute for extra `-check` tests on typical desktops. v0.2 does not pass `-check`. Probe timeout is **10 minutes** (`PROBE_TIMEOUT_MS`), separate from the 8s capability timeout.
+
+### 4.3 v0.3 upstream verification (2026-09-13)
+
+Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master` (`writeHost`, `readHost`, `writeDevs`, `getDeviceBus`, `setDevCount` / `getDeviceCount`, meminfo `Ram_total`), current `-help`, Cockpit `cockpit.file` types (`pkg/lib/cockpit.d.ts` `FileOpenOptions.superuser`), and **authoritative real-host notes supplied by the operator** for a Bazzite host running hw-probe 1.6. This environment did **not** inspect `/root/HW_PROBE` or SSH to that host.
+
+**Raw files, not `-show*`**
+
+- A native privileged `hw-probe -all` writes `/root/HW_PROBE/LOG` and `/root/HW_PROBE/LATEST/hw.info/{host,devices,logs}`. On the reported host, `LATEST` is a real directory. `host` and `devices` are ASCII text (about 575 and 9184 bytes).
+- Canonical resolution of `/root/HW_PROBE/LATEST` may be `/var/roothome/HW_PROBE/LATEST` because of the host root-home layout. The plugin uses the documented/logical path `/root/HW_PROBE/LATEST/...` and must **not** hardcode `/var/roothome`.
+- `-show-host`, `-show-devices`, and `-show` work, but `-show-devices` renders a truncated human table (`Advanced Micr...`, `graphics ...`). v0.3 therefore parses the raw `host` and `devices` files, not the table.
+- These files are an **internal upstream implementation detail**. They are not documented as a stable public API. `-show*` remains a validation/reference interface only.
+- Do not recursively read `/root/HW_PROBE`. Do not read `logs/`. Do not follow `Local probe path:` from stdout as a user-controlled path.
+
+**Host file (`writeHost` / `readHost`)**
+
+- Line-oriented `lc(key) + ":" + value + "\n"`. Upstream `readHost` matches `/(\w+)\:(.*)/` (first colon only). Values may contain additional colons (timestamps, `op_modes`).
+- Unknown keys and malformed individual lines are skipped. A file with zero valid `key:value` lines is `malformed-host`, not an empty success.
+- Useful static inventory copied into the React-facing host model: `arch`, `boot_mode`, `cores`, `kernel`, `model`, `type`, `vendor` (if present), `ram_total`, `monitors`, `nics`, `probe_ver`. Motherboard vendor from a `type=motherboard` device may fill `vendor` when the host file omits it.
+- Transient telemetry is parsed then **omitted** from the summary: `cpu_temp`, `cpu_fan`, `load_average`, `ram_used`.
+- Sensitive host keys are discarded during parse/normalize and never copied into `HardwareSummary`: `hwaddr`, hostname-like `id`/`name`/`hostname`, serials, UUIDs, machine IDs, probe IDs, hashes, IPs, WWNs, and `filesystem` (may contain filesystem UUIDs). The real host sample included `hwaddr:` with a hardware hash; fixtures use an obvious fake.
+
+**RAM units**
+
+- `$Sys{"Ram_total"}` is copied from `/proc/meminfo` `MemTotal: (\d+) kB`. Linux reports that kB as **1024-byte KiB** (`proc(5)` / kernel meminfo). Observed `ram_total:32414356` is therefore 32414356 KiB ≈ **30.9 GiB**, not a decimal-GB marketing figure and not megabytes. Installed DIMM labels (2×16 GB) can still look like “32 GB”; MemTotal is the kernel-visible total and is slightly lower. v0.3 displays the converted MemTotal label, not a guessed “32 GiB”.
+
+**Devices file (`writeDevs`)**
+
+- Join of `ID;Class;Status;Type;Driver;Vendor;Device[;SVendor[;SDevice]]`. Semicolons inside values are replaced with spaces before join. Extra trailing fields may exist; empty `Driver` is represented by `;;`.
+- Discrepancy vs a naive “BUS:ID;CLASS;…” reading: the first field is already `bus:id` (for example `pci:1002-744c-1849-5315`). `Class` is the bus class token (PCI `03-00`), not a human category. `Type` is the human category (`graphics card`, `disk`, `network`, …). Follow upstream `writeDevs`, not the truncated `-show-devices` table.
+- `-show` remaps cpu/mem/bios/board to a SYS bus for display. v0.3 keeps the raw ID prefix lowercased as `bus`.
+- Parser contract: split on `;`, require at least five fields and an ID containing `:`. Optional SVendor/SDevice. Extra future fields ignored. Blank lines skipped. Unknown status/type/bus preserved. Zero successfully parsed rows is `malformed-devices`.
+- Device IDs may be kept internally (React keys / grouping). The primary UI does not display PCI/USB IDs. Serial suffixes matching `-serial-...` are stripped from IDs.
+
+**CPU duplicates**
+
+- `writeDevs` repeats the same CPU line `getDeviceCount` times. For CPU, `setDevCount` uses threads when available, otherwise cores. Real-host `-show-devices` listed the Ryzen 5 7600X 12 times while `cores:6` and the package is a 6-core processor. Those 12 rows are logical-processor copies of one `HW{cpu:...}` entry, not 12 packages.
+- High-level CPU summary: one model + host `cores`. Do **not** advertise thread count from the duplicate-row count. Raw inventory keeps the repeated rows; the Devices CPU list display-groups identical vendor+device rows. This is CPU-specific, not generic name deduplication.
+
+**Memory duplicates**
+
+- Identical `RAM Module 16GB DIMM 4800MT/s` rows are distinct physical modules (`mem:slot-0`, `mem:slot-1`). Count them separately.
+
+**Storage**
+
+- PCI `type=storage` is a controller (SATA / NVMe controller). Overview Storage lists `type=disk` only. Controllers remain in the secondary inventory.
+
+**Graphics / network**
+
+- Do not invent a GPU marketing name from PCI IDs. If Device is `VGA compatible controller`, show that plus vendor and driver (`amdgpu` on the reported host).
+- Network devices use upstream `type=network`. No MAC or IP fields are copied.
+
+**Acquisition**
+
+- Native: `cockpit.file(path, { superuser: "require" }).read()` for the two trusted paths only. This is Cockpit’s documented privileged file API (`FileOpenOptions.superuser`). Prefer it over spawning `/usr/bin/cat`. Do not use `superuser: "try"`, `sudo`, `su`, `pkexec`, or a shell.
+- Missing both files → empty inventory (not a crash). Missing only one file → `host-missing` / `devices-missing`. `problem === "access-denied"` → `administrative-access-required`. Completely malformed text → parse failure, distinct from `hw-probe -all` failure.
+- Page load may read an existing probe. It must not execute `hw-probe -all`. After a successful v0.2 run, reload the two files. If `-all` succeeded but the files are still absent, show that the probe completed and the inventory could not be read.
+- Flatpak: upstream sets `$PROBE_DIR = $ENV{"XDG_DATA_HOME"}."/HW_PROBE"` when `-flatpak`. The official app’s documented `XDG_DATA_HOME` is `~/.var/app/org.linux_hardware.hw-probe/data`. v0.3 reads `<authenticated-home>/.var/app/org.linux_hardware.hw-probe/data/HW_PROBE/LATEST/hw.info/{host,devices}` **without** privilege, using the same parsers. If home cannot be used, `inventory-unavailable`. This is not claimed native/Flatpak parity and was not verified on a live Flatpak host. No `flatpak override`.
+
+**Statuses**
+
+- Preserve upstream `works` / `detected` (UI: Works / Detected). Do not map them to health scores, traffic lights, or findings. v0.4 owns `-check` / findings.
+
+**Privilege boundary (v0.3)**
+
+1. Native `hw-probe -all` via `cockpit.spawn` with `superuser: "require"` after **Run Hardware Probe** (v0.2).
+2. Native read of the two trusted inventory files via `cockpit.file` with `superuser: "require"`.
+
+Capability/version detection remains unprivileged.
 
 ---
 
@@ -398,6 +466,13 @@ Good:
 cockpit.spawn(["hw-probe", "-all"], { superuser: "require" });
 cockpit.spawn(["/home/user/.local/bin/hw-probe", "-all"], { superuser: "require" });
 cockpit.spawn(["flatpak", "run", "org.linux_hardware.hw-probe", "-all"]);
+```
+
+Good (v0.3 native inventory read; documented `cockpit.file`, not `cat`):
+
+```ts
+cockpit.file("/root/HW_PROBE/LATEST/hw.info/host", { superuser: "require" }).read();
+cockpit.file("/root/HW_PROBE/LATEST/hw.info/devices", { superuser: "require" }).read();
 ```
 
 Bad:
@@ -563,13 +638,15 @@ Do not auto-install anything.
 Show:
 
 - installed version
-- Run probe button
+- empty inventory state when `LATEST` host/devices are absent: **No local hardware probe is available yet** plus **Run Hardware Probe**
 - privacy/local-only explanation
 - no upload by default
 
+Do not treat missing `LATEST` data as an application crash.
+
 Example:
 
-> Run a local hardware probe to inspect detected devices and operability information. Nothing is uploaded unless you explicitly choose Upload.
+> Run a local hardware probe to build a hardware summary. Nothing is uploaded.
 
 ## 8.3 Probe running
 
@@ -584,25 +661,17 @@ Do not invent percentage progress.
 
 ## 8.4 Probe complete
 
-Show concise summary:
+v0.3 shows a concise **Hardware Summary** from the privacy-filtered model:
 
-- system
-- OS/kernel
-- total devices
-- devices with reported issues
-- unknown/not-reported devices
+- System (model, architecture, boot mode, kernel)
+- CPU (one processor model, physical cores from `cores`)
+- Memory (converted `ram_total`, physical module count)
+- Graphics / Storage (`type=disk` only) / Network
+- Devices: overview categories, with bridges/controllers and other low-level types under **Other devices**
 
-Then show a device table/list.
+Preserve upstream status wording (Works / Detected). Do not show issue counts, health scores, or findings (v0.4).
 
-Possible columns:
-
-- Device
-- Type
-- Vendor
-- Driver
-- Status
-
-Do not display hundreds of raw log lines.
+Do not display hundreds of raw log lines. Do not dump an ungrouped 90-row table on the overview.
 
 ## 8.5 Findings
 
@@ -825,7 +894,7 @@ Run a real probe successfully from Cockpit without uploading anything. Expected 
 
 A manual `sudo -E ~/.local/bin/hw-probe -all` is validation only and must not be embedded in the plugin.
 
-Status (2026-09-13): v0.2 privilege correction landed in unit tests. The Cockpit/Bazzite real-host retest is **not** marked complete in this environment (no Cockpit session on the target host). Do not start v0.3 until that retest succeeds or the remaining host-specific failure is documented.
+Status (2026-09-13): v0.2 privilege correction landed in unit tests. The Cockpit/Bazzite real-host retest is **not** marked complete in this environment (no Cockpit session on the target host). v0.3 proceeds from the operator-supplied real-host file format notes in §4.3.
 
 ---
 
@@ -833,27 +902,30 @@ Status (2026-09-13): v0.2 privilege correction landed in unit tests. The Cockpit
 
 Goal:
 
-Turn the local probe into useful normalized hardware information.
+After a successful local `hw-probe -all`, read the locally generated inventory, parse it into conservative typed models, privacy-filter it, and display a hardware summary in Cockpit. No upload occurs.
 
-Research the most reliable structured local source.
+Status (2026-09-13): implemented in this repository against sanitized fixtures and unit tests. The Bazzite real-host gate is for the operator; this environment cannot mark it passed.
 
-Implement:
+Parser contract: §4.3. Sources are `/root/HW_PROBE/LATEST/hw.info/host` and `.../devices` (internal hw-probe format). Acquisition is `cockpit.file` with `superuser: "require"` for native files.
 
-- host/system summary
-- device inventory
-- normalized device categories
-- driver field where reliably available
-- device status where explicitly available
-- issue count
-- unknown state
+Implemented:
 
-Do not infer health.
+- host/system summary (static inventory only; no telemetry dashboard)
+- privacy filter that discards `hwaddr` and other sensitive identifiers before React
+- device inventory grouped by type (overview vs secondary)
+- driver and upstream status where present (`works` / `detected`, not health scores)
+- CPU logical-row grouping for the summary; RAM modules not generically deduplicated
+- Storage overview = `type=disk` only
+- empty state when no local probe exists; reload after v0.2 success
+- Flatpak documented-data-dir read, or `inventory-unavailable` if home cannot be used
 
-Tests must use realistic sanitized probe fixtures.
+Do not infer health. Do not run `-check` / `-check-extended`. Do not upload.
 
-Real-host gate:
+Tests must use realistic sanitized probe fixtures (no real hwaddr/serials).
 
-Compare displayed summary against actual hw-probe local data on the host.
+Real-host gate (operator, not this environment):
+
+Compare the displayed summary against `/root/HW_PROBE/LATEST/hw.info` on the Bazzite host. See README for the checklist.
 
 ---
 

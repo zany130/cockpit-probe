@@ -63,3 +63,100 @@ export type ProbeExecutionState =
         completedAt: number;
         error: ProbeExecutionError;
     };
+
+export type InventoryErrorKind =
+    | "missing"
+    | "host-missing"
+    | "devices-missing"
+    | "administrative-access-required"
+    | "malformed-host"
+    | "malformed-devices"
+    | "read-failed"
+    | "inventory-unavailable"
+    | "unknown";
+
+export interface InventoryError {
+    kind: InventoryErrorKind;
+    message: string;
+}
+
+export interface HostSummary {
+    architecture?: string | undefined;
+    bootMode?: string | undefined;
+    physicalCoreCount?: number | undefined;
+    kernel?: string | undefined;
+    vendor?: string | undefined;
+    model?: string | undefined;
+    systemType?: string | undefined;
+    ramTotalKiB?: number | undefined;
+    ramTotalLabel?: string | undefined;
+    monitorCount?: number | undefined;
+    nicCount?: number | undefined;
+    probeVersion?: string | undefined;
+}
+
+export interface HardwareDevice {
+    bus: string;
+    id: string;
+    className: string;
+    status: string;
+    type: string;
+    driver: string | null;
+    vendor: string;
+    device: string;
+    subvendor?: string | undefined;
+    subdevice?: string | undefined;
+}
+
+export type DeviceCategoryId =
+    | "cpu"
+    | "memory"
+    | "graphics"
+    | "storage"
+    | "storage-controller"
+    | "network"
+    | "sound"
+    | "display"
+    | "input"
+    | "usb"
+    | "bluetooth"
+    | "motherboard"
+    | "firmware"
+    | "other";
+
+export interface DeviceCategoryGroup {
+    id: DeviceCategoryId;
+    prominence: "overview" | "secondary";
+    devices: HardwareDevice[];
+}
+
+export interface CpuSummary {
+    model: string;
+    vendor?: string | undefined;
+    physicalCoreCount?: number | undefined;
+    logicalEntryCount: number;
+}
+
+export interface MemorySummary {
+    totalLabel?: string | undefined;
+    moduleCount: number;
+    modules: HardwareDevice[];
+}
+
+export interface HardwareSummary {
+    host: HostSummary;
+    cpu: CpuSummary | null;
+    memory: MemorySummary;
+    graphics: HardwareDevice[];
+    disks: HardwareDevice[];
+    network: HardwareDevice[];
+    categories: DeviceCategoryGroup[];
+    deviceCount: number;
+}
+
+export type InventoryState =
+    | { status: "idle" }
+    | { status: "loading" }
+    | { status: "empty" }
+    | { status: "ready"; summary: HardwareSummary }
+    | { status: "failed"; error: InventoryError };

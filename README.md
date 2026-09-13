@@ -6,28 +6,43 @@ A Cockpit plugin that provides a native web UI around [`hw-probe`](https://githu
 
 ## Current status
 
-**v0.2 — Local Probe Execution**
+**v0.3 — Local Probe Parsing and Hardware Summary**
 
 This version provides:
 
 - a Cockpit plugin with one **Hardware Probe** navigation item
 - detection of whether `hw-probe` is available from PATH, `~/.local/bin`, or the official Flatpak
 - installed version detection via `hw-probe -dumpversion`
-- a manual **Run Hardware Probe** action that runs a local probe
+- a manual **Run Hardware Probe** action that runs a local `hw-probe -all`
 - running, success, failure, timeout, cancelled, and administrative-access-required states
 - targeted Cancel of only the process this page started
+- a hardware summary parsed from the local probe’s raw `host` and `devices` files
+- overview cards for System, CPU, Memory, Graphics, Storage (physical disks), and Network
+- a categorized Devices list, with bridges/controllers and other low-level types under **Other devices**
+- privacy filtering that discards identifiers such as `hwaddr` before they reach the UI model
 
 This version does **not**:
 
-- parse hardware inventory or findings
-- upload anything
-- contact linux-hardware.org
-- install packages
+- upload anything or contact linux-hardware.org
+- run `hw-probe -check` or `-check-extended`
+- interpret `works` / `detected` as a health score or findings
+- install packages or drivers
 - use `sudo`, `su`, `pkexec`, or a shell
 - change Flatpak sandbox permissions
-- request administrative access on page load, refresh, or version detection
+- automatically run `hw-probe -all` on page load
 
-Version detection runs as the authenticated Cockpit user. Native `hw-probe` 1.6 requires root for the actual probe, so **Run Hardware Probe** uses Cockpit's documented privileged spawn (`superuser: "require"`) only after that button is pressed. Probe data is stored by native `hw-probe` under `/root/HW_PROBE`. The official Flatpak is still started as the signed-in user; sandboxing can reduce hardware visibility. Upload is planned as a later explicit milestone.
+Version detection runs as the authenticated Cockpit user. Native `hw-probe` 1.6 requires root for the actual probe, so **Run Hardware Probe** uses Cockpit's documented privileged spawn (`superuser: "require"`) only after that button is pressed. Reading an existing native inventory uses Cockpit `cockpit.file` with `superuser: "require"` on two trusted paths:
+
+- `/root/HW_PROBE/LATEST/hw.info/host`
+- `/root/HW_PROBE/LATEST/hw.info/devices`
+
+Those files are an internal hw-probe format (not a documented stable public API). The plugin does not parse the truncated `hw-probe -show-devices` table. Canonical resolution of `/root/HW_PROBE` may be a distro-specific root-home alias such as `/var/roothome`; the plugin still uses `/root/HW_PROBE` and does not hardcode that alias.
+
+Device statuses are shown as **Works** or **Detected** as hw-probe reported them. That is not a health score.
+
+If no local probe exists yet, the page shows **No local hardware probe is available yet** and **Run Hardware Probe**. Missing `LATEST` data is not treated as a crash. After a successful probe, the two files are reloaded. Probe command success and inventory parse success are independent.
+
+The official Flatpak is still started as the signed-in user. Inventory is read from the documented Flatpak data directory under the authenticated home (`~/.var/app/org.linux_hardware.hw-probe/data/HW_PROBE/...`) without extra privileges. If that location cannot be determined, the page reports that inventory is unavailable. Native and Flatpak installs are not claimed to be equivalent.
 
 Nothing is uploaded. Running a local hardware probe does not upload data. Uploading to linux-hardware.org is a separate explicit action (not in this version).
 
@@ -39,7 +54,7 @@ The intended product workflow is:
 local probe → inspect summary → optional explicit upload
 ```
 
-That workflow is not fully implemented yet. v0.2 can run a local probe. Inventory parsing and optional upload come later.
+v0.3 covers local probe execution plus the hardware summary. Findings and optional upload come later.
 
 ## Package name
 
@@ -119,11 +134,13 @@ npm test
 NODE_ENV=production npm run build
 ```
 
-`npm test` runs Vitest unit tests for the parser, providers, spawn timeout, probe execution, and UI states.
+`npm test` runs Vitest unit tests for parsers, providers, spawn timeout, probe execution, inventory, and UI states.
 
-`make check` is the optional Cockpit VM integration test from the Starter Kit. It is not required for v0.2 unit validation.
+`make check` is the optional Cockpit VM integration test from the Starter Kit. It is not required for v0.3 unit validation.
 
 ## Real-host verification (Bazzite / Fedora)
+
+This plugin was implemented and unit-tested in a Chromebook Linux container. It has **not** been marked as passing the Bazzite real-host gate from this environment.
 
 1. Build and install the development plugin:
 
@@ -142,23 +159,34 @@ NODE_ENV=production npm run build
    flatpak run org.linux_hardware.hw-probe -dumpversion
    ```
 
-   They should match after trimming whitespace. A user-local binary should be detected even when Cockpit's process PATH does not include `~/.local/bin`. An official Flatpak install should be detected after PATH and user-local lookups fail. If both a native install and the Flatpak are present, the native version is the one shown.
+   They should match after trimming whitespace. A user-local binary should be detected even when Cockpit's process PATH does not include `~/.local/bin`. If both a native install and the Flatpak are present, the native version is the one shown.
 
-4. Click **Run Hardware Probe**. Native probes request Cockpit administrative access at that moment (not during page load or version detection) and run the documented local operation `-all` without `-upload`. Compare with a privileged terminal run only for validation:
+4. If `/root/HW_PROBE/LATEST/hw.info/{host,devices}` already exist from a previous privileged probe, the Hardware Summary should load after administrative access is granted for the file read. Confirm:
+
+   - System model matches the host `model` (for example ASRock B650M Pro RS WiFi)
+   - CPU appears **once** at summary level, not 12 times
+   - Physical core count is **6**
+   - Total memory is the converted `ram_total` from `/proc/meminfo` KiB (32414356 KiB displays as **30.9 GiB**, which is the kernel MemTotal, not a marketing “32 GB”)
+   - Two physical RAM modules remain listed
+   - GPU vendor/device are shown honestly (VGA compatible controller) with driver **amdgpu**
+   - Four physical disks appear; PCI SATA/NVMe **controllers are not counted as disks**
+   - Two network adapters appear
+   - The host `hwaddr` value is **nowhere** in the UI
+   - Low-level devices remain available under **Devices** / **Other devices**
+   - There is no Upload action, no `-check`, and no health score
+
+5. Click **Run Hardware Probe**. Native probes request Cockpit administrative access and run `-all` without `-upload`. After success, the summary should refresh from the two files. Compare with a privileged terminal run only for validation:
 
    ```bash
    hw-probe -all
    sudo -E ~/.local/bin/hw-probe -all
-   flatpak run org.linux_hardware.hw-probe -all
    ```
 
-   Use the invocation that matches the installation Cockpit detected. The plugin does not embed `sudo`; Cockpit's privileged spawn is the production path. The command must not include `-upload`. A successful native privileged run stores probe data under `/root/HW_PROBE` and typically prints `Local probe path: /root/HW_PROBE/LATEST/hw.info`. A Flatpak run is unprivileged in this version and may see less hardware because of sandboxing.
+   The plugin does not embed `sudo`. Confirm the command line is not `hw-probe -check` and does not include `-upload`. A successful native privileged run stores probe data under `/root/HW_PROBE`.
 
-   If Cockpit denies administrative access, the page reports that administrative access is required. That is not a generic `hw-probe` command failure.
+   If Cockpit denies administrative access, the page reports that administrative access is required. That is not a generic `hw-probe` command failure. If the probe command succeeds but the inventory files cannot be parsed, that is shown as an inventory-read failure, not “Hardware probe failed.”
 
-5. Click **Refresh** only after the probe is idle. Refresh re-runs version detection, not a probe.
-
-6. Optional missing-tool check: temporarily hide `hw-probe` from `PATH` for the Cockpit session, or test on a host without the package. The page should say that `hw-probe` is not installed or cannot be found.
+6. Click **Refresh** only after the probe is idle. Refresh re-runs version detection and re-reads the existing inventory; it does not start `hw-probe -all` by itself.
 
 On Fedora:
 
@@ -172,7 +200,7 @@ On Bazzite, the same Fedora package can be layered if it is not already present:
 rpm-ostree install hw-probe
 ```
 
-Do not use this plugin to install the package; v0.1 has no install action.
+Do not use this plugin to install the package.
 
 ## License
 

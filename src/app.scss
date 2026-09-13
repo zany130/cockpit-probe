@@ -2,7 +2,7 @@
 @use "page.scss";
 
 .hw-probe-page {
-    max-width: 48rem;
+    max-width: 70rem;
 }
 
 .hw-probe-page .pf-v6-c-title {
@@ -25,4 +25,46 @@
     display: flex;
     flex-direction: column;
     gap: var(--pf-t--global--spacer--md);
+}
+
+.hw-probe-summary-heading {
+    font-size: var(--pf-t--global--font--size--heading--md);
+    margin-block: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--sm);
+}
+
+.hw-probe-summary-note {
+    color: var(--pf-t--global--text--color--subtle);
+    margin-block-end: var(--pf-t--global--spacer--md);
+}
+
+.hw-probe-device-lines {
+    margin: 0;
+    padding-inline-start: 1.25rem;
+}
+
+.hw-probe-device-lines li + li {
+    margin-block-start: var(--pf-t--global--spacer--sm);
+}
+
+.hw-probe-device-meta {
+    color: var(--pf-t--global--text--color--subtle);
+    font-size: var(--pf-t--global--font--size--sm);
+}
+
+.hw-probe-category {
+    margin-block-end: var(--pf-t--global--spacer--md);
+}
+
+.hw-probe-category h3 {
+    font-size: var(--pf-t--global--font--size--heading--xs);
+    margin-block-end: var(--pf-t--global--spacer--sm);
+}
+
+.hw-probe-compact-run {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.hw-probe-inventory {
+    margin-block-start: var(--pf-t--global--spacer--lg);
 }

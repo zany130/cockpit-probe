@@ -1,3 +1,5 @@
+import { VALID_DEVICES_FIXTURE, VALID_HOST_FIXTURE } from '../src/fixtures/inventory-fixtures';
+
 type MockState =
     | 'available'
     | 'unavailable'
@@ -5,7 +7,10 @@ type MockState =
     | 'timeout'
     | 'error'
     | 'loading'
-    | 'admin-denied';
+    | 'admin-denied'
+    | 'empty-inventory';
+
+let probed = false;
 
 function currentState(): MockState {
     if (typeof window === 'undefined')
@@ -16,7 +21,8 @@ function currentState(): MockState {
             value === 'timeout' ||
             value === 'error' ||
             value === 'loading' ||
-            value === 'admin-denied')
+            value === 'admin-denied' ||
+            value === 'empty-inventory')
         return value;
     return 'available';
 }
@@ -40,9 +46,9 @@ function spawn(args: string[]) {
         if (state === 'loading')
             return;
 
-        if (args.includes('-upload') || args.includes('--upload')) {
+        if (args.includes('-upload') || args.includes('--upload') || args.includes('-check')) {
             window.setTimeout(() => {
-                reject({ problem: null, exit_status: 99, exit_signal: null, message: 'upload is not allowed' });
+                reject({ problem: null, exit_status: 99, exit_signal: null, message: 'disallowed argument' });
             }, 10);
             return;
         }
@@ -50,12 +56,13 @@ function spawn(args: string[]) {
         const delay = args.includes('-all') ? 600 : 250;
 
         window.setTimeout(() => {
-            if (state === 'available' || state === 'admin-denied') {
+            if (state === 'available' || state === 'admin-denied' || state === 'empty-inventory') {
                 if (args.includes('-all')) {
                     if (state === 'admin-denied') {
                         reject({ problem: 'access-denied', exit_status: null, exit_signal: null, message: '' });
                         return;
                     }
+                    probed = true;
                     resolve(
                         'Probe for hardware ... Ok\nReading logs ... Ok\nLocal probe path: /root/HW_PROBE/LATEST/hw.info\n'
                     );
@@ -81,6 +88,30 @@ function spawn(args: string[]) {
     return Object.assign(promise, { close: (problem?: string) => close(problem) });
 }
 
+function file(path: string, options?: { superuser?: string }) {
+    const state = currentState();
+    return {
+        path,
+        read: async () => {
+            if (state === 'admin-denied' && options?.superuser === 'require') {
+                const error = { problem: 'access-denied', message: '' };
+                throw error;
+            }
+            if (state === 'empty-inventory' && !probed)
+                return null;
+            if (path.endsWith('/host'))
+                return VALID_HOST_FIXTURE;
+            if (path.endsWith('/devices'))
+                return VALID_DEVICES_FIXTURE;
+            return null;
+        },
+        close: () => undefined,
+        replace: async () => '',
+        watch: () => ({ remove: () => undefined }),
+        modify: async () => null,
+    };
+}
+
 const cockpit = {
     gettext: (message: string) => message,
     format: (template: string, ...args: unknown[]) => {
@@ -94,6 +125,7 @@ const cockpit = {
         },
     },
     spawn,
+    file,
 };
 
 export default cockpit;

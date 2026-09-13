@@ -12,8 +12,9 @@ import cockpit from 'cockpit';
 import { resolveHwProbe } from './capability-provider';
 import { CapabilityView, type CapabilityViewStatus } from './capability-view';
 import type { HwProbeInvocation } from './executable';
-import type { HwProbeCapability, ProbeExecutionState } from './model';
+import type { HwProbeCapability, InventoryState, ProbeExecutionState } from './model';
 import { createProbeController } from './probe-provider';
+import { loadHardwareInventory, reconcileInventoryWithProbe, cockpitInventoryFileReader } from './inventory-provider';
 import { SectionErrorBoundary } from './section-error-boundary';
 
 const _ = cockpit.gettext;
@@ -21,9 +22,11 @@ const _ = cockpit.gettext;
 export const Application = () => {
     const [status, setStatus] = useState<CapabilityViewStatus>({ phase: "loading" });
     const [execution, setExecution] = useState<ProbeExecutionState>({ status: "idle" });
+    const [inventory, setInventory] = useState<InventoryState>({ status: "idle" });
     const [refreshNonce, setRefreshNonce] = useState(0);
     const invocationRef = useRef<HwProbeInvocation | null>(null);
     const controllerRef = useRef(createProbeController());
+    const readInventory = useRef(cockpitInventoryFileReader());
 
     const refresh = useCallback(() => {
         setRefreshNonce(nonce => nonce + 1);
@@ -44,6 +47,21 @@ export const Application = () => {
         return controllerRef.current.subscribe(setExecution);
     }, []);
 
+    const loadInventory = useCallback((invocation: HwProbeInvocation, executionState: ProbeExecutionState) => {
+        setInventory({ status: "loading" });
+        loadHardwareInventory(invocation, { readFile: readInventory.current }).then(result => {
+            setInventory(reconcileInventoryWithProbe(result, executionState));
+        }, () => {
+            setInventory({
+                status: "failed",
+                error: {
+                    kind: "unknown",
+                    message: "The local hardware inventory could not be read",
+                },
+            });
+        });
+    }, []);
+
     useEffect(() => {
         let ignore = false;
         setStatus({ phase: "loading" });
@@ -53,6 +71,10 @@ export const Application = () => {
                 return;
             invocationRef.current = resolved.invocation;
             setStatus({ phase: "ready", capability: resolved.capability });
+            if (resolved.invocation != null && resolved.capability.state === "available")
+                loadInventory(resolved.invocation, controllerRef.current.getState());
+            else
+                setInventory({ status: "idle" });
         }, () => {
             if (ignore)
                 return;
@@ -70,7 +92,16 @@ export const Application = () => {
         return () => {
             ignore = true;
         };
-    }, [refreshNonce]);
+    }, [refreshNonce, loadInventory]);
+
+    useEffect(() => {
+        if (execution.status !== "succeeded")
+            return;
+        const invocation = invocationRef.current;
+        if (invocation == null)
+            return;
+        loadInventory(invocation, execution);
+    }, [execution, loadInventory]);
 
     return (
         <Page className="pf-m-no-sidebar no-masthead-sidebar">
@@ -86,6 +117,7 @@ export const Application = () => {
                                 execution={execution}
                                 onRunProbe={runProbe}
                                 onCancelProbe={cancelProbe}
+                                inventory={inventory}
                         />
                     </SectionErrorBoundary>
                 </div>

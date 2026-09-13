@@ -25,6 +25,7 @@ interface ProbeExecutionViewProps {
     onRun: () => void;
     onCancel: () => void;
     backend?: "native" | "flatpak";
+    compact?: boolean;
 }
 
 export const ProbeExecutionView = ({
@@ -32,6 +33,7 @@ export const ProbeExecutionView = ({
     onRun,
     onCancel,
     backend = "native",
+    compact = false,
 }: ProbeExecutionViewProps) => {
     switch (execution.status) {
     case "running":
@@ -44,9 +46,23 @@ export const ProbeExecutionView = ({
         return <FailedProbe execution={execution} onRun={onRun} />;
     case "idle":
     default:
+        if (compact)
+            return <CompactIdleProbe onRun={onRun} />;
         return <IdleProbe onRun={onRun} backend={backend} />;
     }
 };
+
+const CompactIdleProbe = ({ onRun }: { onRun: () => void }) => (
+    <div className="hw-probe-compact-run">
+        <Button
+                variant="secondary"
+                onClick={onRun}
+                aria-label={_("Run hardware probe")}
+        >
+            {_("Run Hardware Probe")}
+        </Button>
+    </div>
+);
 
 const IdleProbe = ({
     onRun,
@@ -126,7 +142,7 @@ const SucceededProbe = ({
             title={_("Local hardware probe completed successfully.")}
     >
         <p>{cockpit.format(_("Duration: $0"), formatDuration(execution.completedAt - execution.startedAt))}</p>
-        <p>{_("Hardware inventory and findings are not shown in this milestone.")}</p>
+        <p>{_("No probe data was uploaded.")}</p>
         <Button
                 variant="secondary"
                 onClick={onRun}

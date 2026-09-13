@@ -4,6 +4,8 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CapabilityView } from './capability-view';
+import { VALID_DEVICES_FIXTURE, VALID_HOST_FIXTURE } from './fixtures/inventory-fixtures';
+import { normalizeInventory } from './inventory-normalizer';
 
 afterEach(() => {
     cleanup();
@@ -28,9 +30,8 @@ describe('CapabilityView', () => {
                     onCancelProbe={() => {}}
             />
         );
-        expect(screen.getByRole('heading', { name: 'hw-probe is available' })).toBeInTheDocument();
-        expect(screen.getByText('Version')).toBeInTheDocument();
         expect(screen.getByText('1.6.6')).toBeInTheDocument();
+        expect(screen.getByText(/hw-probe/)).toBeInTheDocument();
         expect(screen.getByText(/Native hardware probes require Cockpit administrative access/)).toBeInTheDocument();
         expect(screen.getByText(/No probe data is uploaded by this action/)).toBeInTheDocument();
         expect(screen.queryByText(/sudo/i)).not.toBeInTheDocument();
@@ -186,5 +187,97 @@ describe('CapabilityView', () => {
         );
         expect(screen.getByText('<img src=x onerror=alert(1)>')).toBeInTheDocument();
         expect(document.querySelector('img')).toBeNull();
+    });
+
+    it('shows the empty inventory state', () => {
+        render(
+            <CapabilityView
+                    status={{ phase: 'ready', capability: { state: 'available', version: '1.6' } }}
+                    onRefresh={() => {}}
+                    execution={{ status: 'idle' }}
+                    onRunProbe={() => {}}
+                    onCancelProbe={() => {}}
+                    inventory={{ status: 'empty' }}
+            />
+        );
+        expect(screen.getByText(/No local hardware probe is available yet/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Run hardware probe' })).toBeInTheDocument();
+        expect(screen.queryByText(/health score/i)).not.toBeInTheDocument();
+    });
+
+    it('shows a parsed summary and keeps probe success distinct from parse failure', () => {
+        const result = normalizeInventory(VALID_HOST_FIXTURE, VALID_DEVICES_FIXTURE);
+        if (!result.ok)
+            throw new Error('fixture must normalize');
+        render(
+            <CapabilityView
+                    status={{ phase: 'ready', capability: { state: 'available', version: '1.6' } }}
+                    onRefresh={() => {}}
+                    execution={{ status: 'succeeded', startedAt: 0, completedAt: 1 }}
+                    onRunProbe={() => {}}
+                    onCancelProbe={() => {}}
+                    inventory={{ status: 'ready', summary: result.summary }}
+            />
+        );
+        expect(screen.getByText('Hardware Summary')).toBeInTheDocument();
+        expect(screen.getByText(/completed successfully/)).toBeInTheDocument();
+        expect(screen.queryByText(/hardware probe command failed/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /upload/i })).not.toBeInTheDocument();
+    });
+
+    it('refreshes from the empty state into a summary after a successful probe', () => {
+        const result = normalizeInventory(VALID_HOST_FIXTURE, VALID_DEVICES_FIXTURE);
+        if (!result.ok)
+            throw new Error('fixture must normalize');
+        const onRunProbe = vi.fn();
+        const { rerender } = render(
+            <CapabilityView
+                    status={{ phase: 'ready', capability: { state: 'available', version: '1.6' } }}
+                    onRefresh={() => {}}
+                    execution={{ status: 'idle' }}
+                    onRunProbe={onRunProbe}
+                    onCancelProbe={() => {}}
+                    inventory={{ status: 'empty' }}
+            />
+        );
+        expect(screen.getByText(/No local hardware probe is available yet/)).toBeInTheDocument();
+        screen.getByRole('button', { name: 'Run hardware probe' }).click();
+        expect(onRunProbe).toHaveBeenCalledTimes(1);
+        rerender(
+            <CapabilityView
+                    status={{ phase: 'ready', capability: { state: 'available', version: '1.6' } }}
+                    onRefresh={() => {}}
+                    execution={{ status: 'succeeded', startedAt: 0, completedAt: 1 }}
+                    onRunProbe={onRunProbe}
+                    onCancelProbe={() => {}}
+                    inventory={{ status: 'ready', summary: result.summary }}
+            />
+        );
+        expect(screen.getByText('Hardware Summary')).toBeInTheDocument();
+        expect(screen.getByText('6 cores')).toBeInTheDocument();
+        expect(screen.getByText(/completed successfully/)).toBeInTheDocument();
+        expect(screen.queryByText(/No local hardware probe is available yet/)).not.toBeInTheDocument();
+    });
+
+    it('shows inventory parse failure beside a successful probe', () => {
+        render(
+            <CapabilityView
+                    status={{ phase: 'ready', capability: { state: 'available', version: '1.6' } }}
+                    onRefresh={() => {}}
+                    execution={{ status: 'succeeded', startedAt: 0, completedAt: 1 }}
+                    onRunProbe={() => {}}
+                    onCancelProbe={() => {}}
+                    inventory={{
+                        status: 'failed',
+                        error: {
+                            kind: 'malformed-host',
+                            message: 'The local host inventory could not be parsed',
+                        },
+                    }}
+            />
+        );
+        expect(screen.getByText(/completed successfully/)).toBeInTheDocument();
+        expect(screen.getByText('The hardware inventory could not be read')).toBeInTheDocument();
+        expect(screen.queryByText(/hardware probe command failed/i)).not.toBeInTheDocument();
     });
 });
