@@ -93,7 +93,7 @@ export const ShareProbeView = ({
             <p className="hw-probe-summary-note">
                 {_("Sharing with linux-hardware.org is optional and separate from the local hardware summary.")}
             </p>
-            {!canUpload && (
+            {!canUpload && upload.status !== "succeeded" && upload.status !== "uploading" && (
                 <Alert
                         variant="info"
                         isInline
@@ -102,7 +102,7 @@ export const ShareProbeView = ({
                     {_("There is no current local probe to share. Use Run Hardware Probe first. Opening this section does not upload anything.")}
                 </Alert>
             )}
-            {canUpload && upload.status === "idle" && !confirming && (
+            {canUpload && (upload.status === "idle" || upload.status === "succeeded") && !confirming && (
                 <Button
                         innerRef={triggerRef}
                         variant="secondary"
@@ -218,7 +218,7 @@ const ConfirmationCopy = ({
                 </p>
             )}
         <p>
-            {_("After a successful upload, hw-probe removes its local LATEST probe copy. This page keeps the summary already shown until you refresh or run a new probe.")}
+            {_("After a successful upload, hw-probe removes its local LATEST probe copy. This page then shows that no local probe is available, while keeping the public URL for this session. Upload Probe is not offered again until you run a new hardware probe.")}
         </p>
         <p>
             {_("Upload is optional. Cancel leaves the local probe on this page and does not send anything.")}

@@ -13,6 +13,7 @@ type MockState =
     | 'flatpak';
 
 let probed = false;
+let latestPresent = true;
 
 function currentState(): MockState {
     if (typeof window === 'undefined')
@@ -80,6 +81,7 @@ function spawn(args: string[], options?: { superuser?: string }) {
                         return;
                     }
                     probed = true;
+                    latestPresent = true;
                     resolve(
                         'Probe for hardware ... Ok\nReading logs ... Ok\nLocal probe path: /root/HW_PROBE/LATEST/hw.info\n'
                     );
@@ -90,7 +92,7 @@ function spawn(args: string[], options?: { superuser?: string }) {
                         reject({ problem: 'access-denied', exit_status: null, exit_signal: null, message: '' });
                         return;
                     }
-                    if (state === 'empty-inventory' && !probed) {
+                    if ((state === 'empty-inventory' && !probed) || !latestPresent) {
                         reject({
                             problem: null,
                             exit_status: 1,
@@ -99,6 +101,7 @@ function spawn(args: string[], options?: { superuser?: string }) {
                         });
                         return;
                     }
+                    latestPresent = false;
                     resolve('Probe URL: https://linux-hardware.org/?probe=b394035f90\n');
                     return;
                 }
@@ -135,7 +138,7 @@ function file(path: string, options?: { superuser?: string }) {
                 const error = { problem: 'access-denied', message: 'flatpak mock must stay unprivileged' };
                 throw error;
             }
-            if (state === 'empty-inventory' && !probed)
+            if ((state === 'empty-inventory' && !probed) || !latestPresent)
                 return null;
             if (path.endsWith('/host'))
                 return VALID_HOST_FIXTURE;

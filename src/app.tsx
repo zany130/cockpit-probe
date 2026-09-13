@@ -82,7 +82,10 @@ export const Application = () => {
             invocation,
             executionState,
             setInventory,
-            { keepPrevious }
+            {
+                keepPrevious,
+                localCopyConsumed: uploadRef.current.getState().status === "succeeded",
+            }
         );
     }, []);
 
@@ -132,6 +135,15 @@ export const Application = () => {
             return;
         loadInventory(invocation, execution, true);
     }, [execution, loadInventory]);
+
+    useEffect(() => {
+        if (upload.status !== "succeeded")
+            return;
+        // hw-probe deletes LATEST after a successful -upload. Treat that as
+        // no local probe, not as a missing-inventory read failure.
+        inventorySessionRef.current.replace({ status: "empty" }, setInventory);
+        controllerRef.current.reset();
+    }, [upload]);
 
     useEffect(() => {
         const probe = controllerRef.current;

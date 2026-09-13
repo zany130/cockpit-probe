@@ -188,4 +188,41 @@ describe('ShareProbeView', () => {
         expect(screen.queryByRole('link', { name: /View uploaded probe/ })).not.toBeInTheDocument();
         expect(screen.getByText(/address could not be read/)).toBeInTheDocument();
     });
+
+    it('keeps the uploaded probe URL when the local copy is gone', () => {
+        render(
+            <ShareProbeView
+                    canUpload={false}
+                    upload={{
+                        status: 'succeeded',
+                        result: { url: 'https://linux-hardware.org/?probe=b394035f90', probeId: 'b394035f90' },
+                    }}
+                    onRequestUpload={() => {}}
+                    onCancelUpload={() => {}}
+            />
+        );
+        expect(screen.getByText('Probe uploaded successfully')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /View uploaded probe/ })).toHaveAttribute(
+            'href',
+            'https://linux-hardware.org/?probe=b394035f90'
+        );
+        expect(screen.queryByText(/Run a hardware probe before uploading/)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Upload probe to linux-hardware.org' })).not.toBeInTheDocument();
+    });
+
+    it('tells the operator that a successful upload removes the local copy', () => {
+        render(
+            <ShareProbeView
+                    canUpload
+                    upload={idle}
+                    onRequestUpload={() => {}}
+                    onCancelUpload={() => {}}
+            />
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Upload probe to linux-hardware.org' }));
+        const dialog = screen.getByRole('dialog');
+        expect(dialog.textContent).toMatch(/removes its local LATEST probe copy/);
+        expect(dialog.textContent).toMatch(/no local probe is available/);
+        expect(dialog.textContent).not.toMatch(/keeps the summary already shown/);
+    });
 });

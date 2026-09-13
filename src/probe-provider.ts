@@ -32,6 +32,8 @@ export interface ProbeController {
     subscribe: (listener: ProbeStateListener) => () => void;
     run: (invocation: HwProbeInvocation) => Promise<void>;
     cancel: () => void;
+    /** Clears a finished probe so the page can return to "no local probe yet". */
+    reset: () => void;
 }
 
 export function createProbeController(options?: {
@@ -116,6 +118,13 @@ export function createProbeController(options?: {
                 return;
             cancelRequested = true;
             handle?.close("cancelled");
+        },
+        reset: () => {
+            if (state.status === "running" || state.status === "idle")
+                return;
+            cancelRequested = false;
+            handle = null;
+            setState({ status: "idle" });
         },
     };
 }

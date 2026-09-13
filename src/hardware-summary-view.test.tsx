@@ -189,4 +189,25 @@ describe('HardwareSummaryView', () => {
         expect(screen.getByText(/Drive health \(SMART\) is collected only when hw-probe runs as administrator/)).toBeInTheDocument();
         expect(screen.queryByText(/Native hardware probes require Cockpit administrative access/)).not.toBeInTheDocument();
     });
+
+    it('after upload shows the empty probe state and the public URL, not a read failure', () => {
+        render(
+            <HardwareSummaryView
+                    inventory={{ status: 'empty' }}
+                    onRunProbe={() => {}}
+                    upload={{
+                        status: 'succeeded',
+                        result: { url: 'https://linux-hardware.org/?probe=b394035f90', probeId: 'b394035f90' },
+                    }}
+                    onRequestUpload={() => {}}
+                    onCancelUpload={() => {}}
+            />
+        );
+        expect(screen.getByText(/No local hardware probe is available yet/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Run hardware probe' })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /View uploaded probe/ })).toBeInTheDocument();
+        expect(screen.queryByText('The hardware inventory could not be read')).not.toBeInTheDocument();
+        expect(screen.queryByText(/inventory could not be read/)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Upload probe to linux-hardware.org' })).not.toBeInTheDocument();
+    });
 });

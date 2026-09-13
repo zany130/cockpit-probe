@@ -12,6 +12,8 @@ This version keeps the v0.6 privilege decision and does **not** add product feat
 
 Refresh no longer blanks the page. Leaving the Cockpit page cancels a running probe or upload. Large device lists show the first 80 rows in each group. Local probe copy says internet is not required; upload still needs the network. Escape dismisses the in-flow upload confirmation.
 
+After a successful upload, hw-probe deletes its local LATEST copy. The page then shows that no local probe is available yet, keeps this session’s public URL, and does not report that as an inventory read failure.
+
 This version still does **not**:
 
 - upload automatically or retry failed uploads by itself
@@ -123,7 +125,7 @@ This environment cannot open a real Cockpit session. A local mock server stands 
 PREVIEW_PORT=43173 npm run preview
 ```
 
-Open `http://127.0.0.1:43173/`. Query `?state=` selects a mock: `available` (default native), `empty-inventory`, `findings-problems`, `admin-denied`, `flatpak` (unprivileged Flatpak completeness), and the older capability-error states. Nothing in this preview talks to linux-hardware.org.
+Open `http://127.0.0.1:43173/`. Query `?state=` selects a mock: `available` (default native), `empty-inventory`, `findings-problems`, `admin-denied`, `flatpak` (unprivileged Flatpak completeness), and the older capability-error states. Mock local probes take about four seconds so the running UI is visible. Nothing in this preview talks to linux-hardware.org.
 
 ## Real-host verification (Bazzite / Fedora)
 
@@ -200,7 +202,7 @@ This plugin was implemented and unit-tested in a Chromebook Linux container. It 
    8. Confirm runs one `hw-probe -upload` (not `-all -upload`) and requests administrative access for native installs.
    9. Success shows **View uploaded probe** only for `https://linux-hardware.org/?probe=…` if hw-probe printed one.
    10. That link opens the external site only when you click it.
-   11. The local summary remains on the page after upload (hw-probe may delete LATEST; Refresh may then show no local probe).
+   11. After success, the local summary is cleared because hw-probe removes LATEST. The page shows **No local hardware probe is available yet** and still offers **View uploaded probe** for this session. Refresh must not report that the inventory could not be read.
    12. A failed upload does not mark the local probe as failed.
    13. Refresh does not repeat the upload.
    14. **Try again** asks for confirmation again.

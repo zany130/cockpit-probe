@@ -291,7 +291,7 @@ Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master` (`writeHos
 
 - Native: `cockpit.file(path, { superuser: "require" }).read()` for the two trusted paths only. This is Cockpit’s documented privileged file API (`FileOpenOptions.superuser`). Prefer it over spawning `/usr/bin/cat`. Do not use `superuser: "try"`, `sudo`, `su`, `pkexec`, or a shell.
 - Missing both files → empty inventory (not a crash). Missing only one file → `host-missing` / `devices-missing`. `problem === "access-denied"` → `administrative-access-required`. Completely malformed text → parse failure, distinct from `hw-probe -all` failure.
-- Page load may read an existing probe. It must not execute `hw-probe -all`. After a successful v0.2 run, reload the two files. If `-all` succeeded but the files are still absent, show that the probe completed and the inventory could not be read.
+- Page load may read an existing probe. It must not execute `hw-probe -all`. After a successful v0.2 run, reload the two files. If `-all` succeeded but the files are still absent, show that the probe completed and the inventory could not be read — unless a successful `-upload` this session already consumed LATEST, in which case show the empty local-probe state and keep the session upload URL.
 - Flatpak: upstream sets `$PROBE_DIR = $ENV{"XDG_DATA_HOME"}."/HW_PROBE"` when `-flatpak`. The official app’s documented `XDG_DATA_HOME` is `~/.var/app/org.linux_hardware.hw-probe/data`. v0.3 reads `<authenticated-home>/.var/app/org.linux_hardware.hw-probe/data/HW_PROBE/LATEST/hw.info/{host,devices}` **without** privilege, using the same parsers. If home cannot be used, `inventory-unavailable`. This is not claimed native/Flatpak parity and was not verified on a live Flatpak host. No `flatpak override`.
 
 **Statuses**
@@ -393,7 +393,7 @@ Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master` (`GetOptio
 11. **No network.** curl failures (codes 6/7/28 observed in messages) → network-unavailable. Upstream may also fall back to Perl POST.
 12. **Server reject.** curl 22 (“The requested URL returned error”) → upstream-rejected.
 13–15. **Privacy.** Help/README: usernames, hostnames, IPs, MACs, UUIDs, serials are “NOT uploaded directly.” A 32-byte prefix of salted SHA512 of MACs and serials **is** uploaded for deduplication; UUIDs are decorated the same way. “Be aware that this may fail in certain edge cases.” Hardware inventory, logs, and hashed identifiers remain. Do not claim complete anonymity.
-16–17. **Mutates LATEST.** After a successful upload, `cleanData()` `rmtree`s `$LATEST_DIR`. That is upstream, not this plugin. Confirmation copy must say so. The already-rendered summary stays in React until Refresh or a new probe.
+16–17. **Mutates LATEST.** After a successful upload, `cleanData()` `rmtree`s `$LATEST_DIR`. That is upstream, not this plugin. Confirmation copy must say so. The plugin then treats the page as **no local probe yet** (empty inventory + Run Hardware Probe), while keeping this session’s upload result URL. Do not map that missing LATEST to “the hardware probe completed, but its inventory could not be read”; that message is only for a fresh `-all` success whose `host`/`devices` files never appeared. Refresh after upload must stay on the empty local-probe state.
 18. **Re-upload.** Supported if LATEST exists. After a successful upload LATEST is gone, so another upload needs a new local probe first.
 19–20. **Flatpak.** Official docs: `flatpak run org.linux_hardware.hw-probe -all -upload`. The wrapper prepends `-flatpak`. Manifest includes `--share=network`. v0.5 uses `flatpak run org.linux_hardware.hw-probe -upload` without `flatpak override`. Not claimed native/Flatpak parity.
 
@@ -851,6 +851,7 @@ After successful upload:
 
 - show returned probe URL
 - Open probe action
+- clear the local summary (hw-probe deleted LATEST); empty state, not a missing-inventory error
 
 Do not automatically re-upload when refreshing the page.
 
@@ -1127,6 +1128,7 @@ Implemented:
 - native `superuser: "require"`; Flatpak unprivileged
 - typed upload state; URL parser accepts only `https://linux-hardware.org/?probe=<id>`
 - View uploaded probe is an explicit external link; it does not auto-navigate
+- after success, hw-probe’s deletion of LATEST is shown as no local probe (empty), not as an inventory read failure; the session URL remains
 - upload failure / cancel / timeout do not clear the local summary
 - no history, no persisted consent, no automatic retry
 
@@ -1192,6 +1194,7 @@ Implemented:
 - inventory load generation / keep-previous refresh
 - cancel probe and upload on page unmount
 - large-inventory render cap
+- after a successful `-upload`, empty local-probe state plus session URL (not missing-inventory failure)
 - Escape on upload confirmation
 - mobile overflow and action layout
 - offline/long-running copy

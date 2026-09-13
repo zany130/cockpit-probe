@@ -260,6 +260,17 @@ describe('reconcileInventoryWithProbe', () => {
         expect(JSON.stringify(reconciled)).not.toMatch(/hardware probe failed/i);
     });
 
+    it('keeps empty inventory when a successful upload consumed the local copy', () => {
+        const succeeded: ProbeExecutionState = {
+            status: 'succeeded',
+            startedAt: 1,
+            completedAt: 2,
+        };
+        expect(reconcileInventoryWithProbe({ status: 'empty' }, succeeded, {
+            localCopyConsumed: true,
+        })).toEqual({ status: 'empty' });
+    });
+
     it('keeps empty inventory when no probe has completed', () => {
         expect(reconcileInventoryWithProbe({ status: 'empty' }, { status: 'idle' })).toEqual({ status: 'empty' });
     });
@@ -332,5 +343,48 @@ describe('createInventoryLoadSession', () => {
         resolvers[0]({ status: 'empty' });
         await Promise.resolve();
         expect(states).toEqual([{ status: 'loading' }]);
+    });
+
+    it('does not treat a consumed local copy as a missing-inventory failure', async () => {
+        const resolvers: Array<(value: InventoryState) => void> = [];
+        const load = () => new Promise<InventoryState>(resolve => {
+            resolvers.push(resolve);
+        });
+        const session = createInventoryLoadSession({ load });
+        const states: InventoryState[] = [];
+        session.request(
+            PATH_DUMPVERSION_INVOCATION,
+            { status: 'succeeded', startedAt: 1, completedAt: 2 },
+            state => {
+                states.push(state);
+            },
+            { localCopyConsumed: true }
+        );
+        resolvers[0]({ status: 'empty' });
+        await Promise.resolve();
+        expect(states[states.length - 1]).toEqual({ status: 'empty' });
+        expect(JSON.stringify(states)).not.toMatch(/inventory could not be read/);
+    });
+
+    it('replace drops in-flight reads and adopts the empty post-upload state', async () => {
+        const resolvers: Array<(value: InventoryState) => void> = [];
+        const load = () => new Promise<InventoryState>(resolve => {
+            resolvers.push(resolve);
+        });
+        const session = createInventoryLoadSession({ load });
+        const states: InventoryState[] = [];
+        const setInventory = (state: InventoryState) => {
+            states.push(state);
+        };
+        session.request(
+            PATH_DUMPVERSION_INVOCATION,
+            { status: 'succeeded', startedAt: 1, completedAt: 2 },
+            setInventory
+        );
+        session.replace({ status: 'empty' }, setInventory);
+        resolvers[0]({ status: 'empty' });
+        await Promise.resolve();
+        expect(states[states.length - 1]).toEqual({ status: 'empty' });
+        expect(states.filter(state => state.status === 'failed')).toHaveLength(0);
     });
 });

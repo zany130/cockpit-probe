@@ -376,4 +376,31 @@ describe('CapabilityView', () => {
         expect(screen.getByText('The hardware inventory could not be read')).toBeInTheDocument();
         expect(screen.queryByText(/hardware probe command failed/i)).not.toBeInTheDocument();
     });
+
+    it('after a successful upload shows no local probe, not a missing-inventory error', () => {
+        render(
+            <CapabilityView
+                    status={{ phase: 'ready', capability: { state: 'available', version: '1.6' } }}
+                    onRefresh={() => {}}
+                    execution={{ status: 'idle' }}
+                    onRunProbe={() => {}}
+                    onCancelProbe={() => {}}
+                    inventory={{ status: 'empty' }}
+                    upload={{
+                        status: 'succeeded',
+                        result: { url: 'https://linux-hardware.org/?probe=b394035f90', probeId: 'b394035f90' },
+                    }}
+                    onRequestUpload={() => {}}
+                    onCancelUpload={() => {}}
+            />
+        );
+        expect(screen.getByText(/No local hardware probe is available yet/)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Run hardware probe' })).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /View uploaded probe/ })).toBeInTheDocument();
+        expect(screen.queryByText('The hardware inventory could not be read')).not.toBeInTheDocument();
+        expect(screen.queryByText(/inventory could not be read/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/completed successfully/)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Upload probe to linux-hardware.org' })).not.toBeInTheDocument();
+        expect(screen.queryByText(/Run a hardware probe before uploading/)).not.toBeInTheDocument();
+    });
 });

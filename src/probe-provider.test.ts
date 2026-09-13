@@ -369,4 +369,24 @@ describe('createProbeController', () => {
         expect(calls[2].args).toEqual(FLATPAK_PROBE_ARGV);
         expect(calls[2].spawnOptions).not.toHaveProperty('superuser');
     });
+
+    it('resets a finished probe back to idle', async () => {
+        const { spawn } = fakeSpawn({ stdout: SUCCESS_STDOUT });
+        const controller = createProbeController({ spawn, now: () => 11 });
+        await controller.run(PATH_DUMPVERSION_INVOCATION);
+        expect(controller.getState().status).toBe('succeeded');
+        controller.reset();
+        expect(controller.getState()).toEqual({ status: 'idle' });
+    });
+
+    it('does not reset a running probe', async () => {
+        const { spawn } = fakeSpawn({ hang: true });
+        const controller = createProbeController({ spawn, now: () => 12, timeoutMs: 60_000 });
+        const pending = controller.run(PATH_DUMPVERSION_INVOCATION);
+        expect(controller.getState().status).toBe('running');
+        controller.reset();
+        expect(controller.getState().status).toBe('running');
+        controller.cancel();
+        await pending;
+    });
 });

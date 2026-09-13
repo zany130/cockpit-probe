@@ -166,9 +166,14 @@ export async function loadHardwareInventory(
 
 export function reconcileInventoryWithProbe(
     inventory: InventoryState,
-    execution: ProbeExecutionState
+    execution: ProbeExecutionState,
+    options?: { localCopyConsumed?: boolean }
 ): InventoryState {
     if (inventory.status === "empty" && execution.status === "succeeded") {
+        if (options?.localCopyConsumed) {
+            // hw-probe -upload deletes LATEST after success. That is not a read failure.
+            return { status: "empty" };
+        }
         return {
             status: "failed",
             error: inventoryError(
@@ -209,10 +214,11 @@ export function createInventoryLoadSession(options?: {
             invocation: HwProbeInvocation,
             execution: ProbeExecutionState,
             setInventory: InventorySetter,
-            requestOptions?: { keepPrevious?: boolean }
+            requestOptions?: { keepPrevious?: boolean; localCopyConsumed?: boolean }
         ) {
             const token = ++generation;
             const keepPrevious = requestOptions?.keepPrevious === true;
+            const localCopyConsumed = requestOptions?.localCopyConsumed === true;
             if (!(keepPrevious && last.status !== "idle" && last.status !== "loading"))
                 publish({ status: "loading" }, setInventory);
             const loadOptions: {
@@ -226,7 +232,10 @@ export function createInventoryLoadSession(options?: {
             load(invocation, loadOptions).then(result => {
                 if (token !== generation)
                     return;
-                publish(reconcileInventoryWithProbe(result, execution), setInventory);
+                publish(
+                    reconcileInventoryWithProbe(result, execution, { localCopyConsumed }),
+                    setInventory
+                );
             }, () => {
                 if (token !== generation)
                     return;
@@ -241,6 +250,10 @@ export function createInventoryLoadSession(options?: {
         },
         invalidate() {
             generation += 1;
+        },
+        replace(state: InventoryState, setInventory: InventorySetter) {
+            generation += 1;
+            publish(state, setInventory);
         },
     };
 }
