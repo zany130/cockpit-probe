@@ -134,6 +134,36 @@ describe('detectHwProbeCapability', () => {
             err: 'ignore',
             environ: [...HW_PROBE_SPAWN_ENVIRON],
         });
+        expect(calls[0].spawnOptions).not.toHaveProperty('superuser');
+    });
+
+    it('does not request Cockpit administrative privilege during capability detection', async () => {
+        const pathLookup = fakeSpawn({ stdout: '1.6' });
+        await detectHwProbeCapability(pathLookup.spawn);
+        expect(pathLookup.calls).toHaveLength(1);
+        expect(pathLookup.calls[0].spawnOptions).not.toHaveProperty('superuser');
+
+        const userLocal = fakeSpawn({
+            byArgv: {
+                [argvKey(PATH_DUMPVERSION_ARGV)]: { error: notFoundError() },
+                [argvKey(USER_LOCAL_DUMPVERSION_ARGV)]: { stdout: '1.6' },
+            },
+        });
+        await detectHwProbeCapability(userLocal.spawn, async () => USER_LOCAL_HOME);
+        expect(userLocal.calls.length).toBeGreaterThan(0);
+        for (const call of userLocal.calls)
+            expect(call.spawnOptions).not.toHaveProperty('superuser');
+
+        const flatpak = fakeSpawn({
+            byArgv: nativeAndUserLocalMissing({
+                [argvKey(FLATPAK_INFO_ARGV)]: { stdout: 'app/org.linux_hardware.hw-probe/x86_64/stable\n' },
+                [argvKey(FLATPAK_DUMPVERSION_ARGV)]: { stdout: '1.6' },
+            }),
+        });
+        await detectHwProbeCapability(flatpak.spawn, async () => USER_LOCAL_HOME);
+        expect(flatpak.calls.some(call => call.args[0] === 'flatpak')).toBe(true);
+        for (const call of flatpak.calls)
+            expect(call.spawnOptions).not.toHaveProperty('superuser');
     });
 
     it('returns the resolved native invocation for later probe execution', async () => {

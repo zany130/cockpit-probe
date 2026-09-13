@@ -21,7 +21,7 @@ import { CubesIcon } from '@patternfly/react-icons';
 
 import cockpit from 'cockpit';
 
-import type { HwProbeCapability, ProbeExecutionState } from './model';
+import type { HwProbeCapability, HwProbeSource, ProbeExecutionState } from './model';
 import { ProbeExecutionView } from './probe-execution-view';
 
 const _ = cockpit.gettext;
@@ -105,6 +105,7 @@ const ReadyStatus = ({
         return (
             <AvailableStatus
                     version={capability.version ?? null}
+                    source={capability.source}
                     execution={execution ?? { status: "idle" }}
                     onRunProbe={onRunProbe}
                     onCancelProbe={onCancelProbe}
@@ -146,11 +147,13 @@ function errorBody(capability: HwProbeCapability): string {
 
 const AvailableStatus = ({
     version,
+    source,
     execution,
     onRunProbe,
     onCancelProbe,
 }: {
     version: string | null;
+    source?: HwProbeSource | undefined;
     execution: ProbeExecutionState;
     onRunProbe?: (() => void) | undefined;
     onCancelProbe?: (() => void) | undefined;
@@ -174,6 +177,7 @@ const AvailableStatus = ({
                     execution={execution}
                     onRun={onRunProbe}
                     onCancel={onCancelProbe}
+                    backend={source === "flatpak" ? "flatpak" : "native"}
             />
         )}
     </div>

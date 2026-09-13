@@ -37,6 +37,7 @@ export interface HwProbeCapability {
 export type ProbeExecutionErrorKind =
     | "command-not-found"
     | "permission-denied"
+    | "administrative-access-required"
     | "timeout"
     | "command-failed"
     | "unknown";

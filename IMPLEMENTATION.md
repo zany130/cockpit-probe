@@ -189,7 +189,7 @@ Verified against current `linuxhw/hw-probe` `flatpak/hw-probe.sh` and `hw-probe.
 
 ### 4.2 v0.2 upstream verification (2026-09-13)
 
-Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master`, current `-help`, a direct unprivileged run of that script, `flatpak-info(1)` / the official Flatpak manifest, and current Cockpit spawn docs.
+Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master`, current `-help`, a direct unprivileged run of that script, `flatpak-info(1)` / the official Flatpak manifest, current Cockpit spawn docs (`pkg/lib/cockpit.d.ts`), and a real-host Bazzite native user-local install.
 
 **Local probe command**
 
@@ -197,8 +197,8 @@ Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master`, current `
 - Getopt still accepts `probe!`, but it is listed under `# Obsolete`. `-probe` alone enables logs at **minimal** level. `-all` enables probe + logs at the **default** log level.
 - README and help examples use `hw-probe -all -upload` for the public upload path. Omitting `-upload` is the local-only form.
 - Direct observation (unprivileged `perl hw-probe.pl -all` and `-probe`, 2026-09-13): both exit 1 with stderr `ERROR: you should run as root ('sudo -E hw-probe ...' or with 'su')` and produce no stdout. No files were written. No upload occurred.
+- Real-host Bazzite (native user-local `~/.local/bin/hw-probe`, reports `hw-probe 1.6`): `~/.local/bin/hw-probe -probe` exits 1 with the same root requirement. Current `-help` on that host documents `-all` and `-upload`, not `-probe`, and reports probe data under `/root/HW_PROBE`.
 - Therefore v0.2 invokes **`-all` only**, through the v0.1 resolved invocation. Do not use obsolete `-probe`. Do not add `-check`, `-save`, or `-upload`.
-- `-save DIR` packages a probe for a later `-src` upload. v0.2 does not relocate artifacts.
 
 **Upload / network**
 
@@ -211,6 +211,7 @@ Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master`, current `
 - Default `PROBE_DIR` is `/root/HW_PROBE` (help: “Probes info is saved in the $PROBE_DIR directory”). `LATEST_DIR` is `$PROBE_DIR/LATEST`. Observed success stdout includes `Local probe path: $DATA_DIR` (typically `/root/HW_PROBE/LATEST/hw.info` when run as root).
 - Snap uses `$SNAP_USER_COMMON/HW_PROBE`. Flatpak uses `$XDG_DATA_HOME/HW_PROBE` (commonly `~/.var/app/org.linux_hardware.hw-probe/data/HW_PROBE`).
 - A new probe `rmtree`s existing `$DATA_DIR` then writes `LATEST`. v0.2 does not delete or relocate probes itself. Cancellation via SIGTERM may leave a partial `LATEST` tree; do not auto-clean.
+- v0.3 will need to read files beneath `/root/HW_PROBE` for native privileged probes. That requires a narrowly scoped privileged read. v0.2 does not implement that read, copy probe data into the Cockpit user's home, or manage history.
 
 **Completion**
 
@@ -219,9 +220,14 @@ Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master`, current `
 
 **Privilege and Flatpak**
 
-- Native (non-Snap/non-Flatpak) probing as a non-root user **hard-fails** (`exitStatus(1)`). Snap/Flatpak only warn “run as root for better results” and continue.
-- v0.2 does not use `sudo`, `pkexec`, or `cockpit.spawn(..., { superuser })`. An unprivileged native run is expected to fail with a normalized command-failed error until v0.6.
-- Official Flatpak `finish-args` include `--device=all`, `--filesystem=host:ro`, `--filesystem=/sys:ro`, `--filesystem=/var/log:ro`, and `--share=network`. SMART and some logs still need root. Do not add `flatpak override`. If Flatpak probing is less complete, say so; do not silently equate it with native root.
+- Native (non-Snap/non-Flatpak) probing as a non-root user **hard-fails** (`exitStatus(1)`). Real-host hw-probe 1.6 matches that.
+- Current Cockpit API (`SuperuserMode = "require" | "try" | null | undefined` on `cockpit.spawn` channel options): native probe execution uses `cockpit.spawn(argv, { superuser: "require", ... })`. If the user cannot become administrator, the channel closes with `problem === "access-denied"`, normalized as `administrative-access-required`.
+- Do **not** use `superuser: "try"`: unprivileged native execution is known to fail, so denial must be explicit.
+- Do **not** use `sudo`, `sudo -E`, `su`, `pkexec`, `sh -c`, or `bash -c`.
+- Capability/version detection remains unprivileged. Privilege is requested only after **Run Hardware Probe**. The page itself is not privileged. Cockpit's existing administrative authentication UI is used; this plugin does not reproduce it.
+- Native argv uses the v0.1 resolved absolute executable (`hw-probe` from PATH, `/usr/bin/hw-probe` when that is the resolved path, or `/home/<user>/.local/bin/hw-probe`). Because root executes that absolute path, PATH is not reconstructed and no shell is used.
+- Official Flatpak metadata indicates root is needed for complete hard-drive health access, not that all probing requires root. v0.2 therefore runs `["flatpak", "run", "org.linux_hardware.hw-probe", "-all"]` as the authenticated Cockpit user, **without** `superuser: "require"`. Do not add `flatpak override`. Sandboxing can reduce hardware visibility relative to a native privileged probe.
+- The broader v0.6 privilege/extended-data review remains for later; this native-probe privilege is only the v0.2 correction required by real-host evidence.
 
 **Cockpit cancellation**
 
@@ -389,7 +395,9 @@ cockpit.spawn(["hw-probe", "-dumpversion"]);
 Good:
 
 ```ts
-cockpit.spawn(["hw-probe", "-all"]);
+cockpit.spawn(["hw-probe", "-all"], { superuser: "require" });
+cockpit.spawn(["/home/user/.local/bin/hw-probe", "-all"], { superuser: "require" });
+cockpit.spawn(["flatpak", "run", "org.linux_hardware.hw-probe", "-all"]);
 ```
 
 Bad:
@@ -777,13 +785,18 @@ Research exact recommended command/options first.
 Implement:
 
 - Run probe action using the v0.1 resolved invocation
-- argv: `buildHwProbeArgv(invocation, ["-all"])` (never `-upload`)
+- argv: `buildHwProbeArgv(invocation, ["-all"])` (never `-upload`, never `-probe`)
+- native probe: `cockpit.spawn(argv, { superuser: "require" })` only after **Run Hardware Probe**
+- Flatpak probe: unprivileged `flatpak run org.linux_hardware.hw-probe -all`
 - running state
 - completion state
+- administrative-access-required when Cockpit returns `access-denied` for native privileged spawn
 - 10-minute probe timeout
 - Cancel via `process.close("cancelled")` on only this spawn
 - no upload
-- no automatic privilege escalation
+- no privilege during capability/version detection
+- no `superuser: "try"`
+- no `sudo` / `su` / `pkexec` / shell
 - no Flatpak permission overrides
 
 The command must not include `-upload`.
@@ -792,21 +805,27 @@ Do not assume a Flatpak install has identical host hardware access to a native i
 
 Tests:
 
-- successful native / user-local / Flatpak argv
-- failure
-- permission denied
-- timeout
-- cancellation
-- duplicate run suppressed
-- executable disappeared
-- Flatpak launch failure
-- no-upload argv regression
+- successful native PATH argv (`["hw-probe", "-all"]` or `["/usr/bin/hw-probe", "-all"]`) with `superuser: "require"`
+- successful user-local argv (`["/home/testuser/.local/bin/hw-probe", "-all"]`) with `superuser: "require"`
+- native `access-denied` → `administrative-access-required`
+- native non-zero exit after privileged start → command-failed
+- Flatpak unprivileged argv
+- no-upload argv regression for every backend
+- no `superuser` on capability/version detection
+- failure / timeout / cancellation / duplicate run suppressed / executable disappeared / Flatpak launch failure
 
 Real-host gate:
 
-Run a real probe successfully from Cockpit without uploading anything.
+Run a real probe successfully from Cockpit without uploading anything. Expected on the Bazzite host whose native install is `~/.local/bin/hw-probe`:
 
-Status (2026-09-13): implementation and unit tests landed. The Cockpit/Bazzite real-host gate is **not** marked complete in this environment (no Cockpit session and no native `hw-probe` package). Direct unprivileged CLI observation of current upstream `hw-probe.pl -all` failed as designed with the root requirement. Do not start v0.3 until a real-host Cockpit probe succeeds or that failure is accepted and documented on the target host.
+1. Hardware Probe detects hw-probe 1.6 without privilege (no authentication prompt on load).
+2. **Run Hardware Probe** requests Cockpit administrative access.
+3. Effective operation is `~/.local/bin/hw-probe -all` through `cockpit.spawn(..., { superuser: "require" })`.
+4. No `-upload`. Native data under `/root/HW_PROBE`.
+
+A manual `sudo -E ~/.local/bin/hw-probe -all` is validation only and must not be embedded in the plugin.
+
+Status (2026-09-13): v0.2 privilege correction landed in unit tests. The Cockpit/Bazzite real-host retest is **not** marked complete in this environment (no Cockpit session on the target host). Do not start v0.3 until that retest succeeds or the remaining host-specific failure is documented.
 
 ---
 

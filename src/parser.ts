@@ -139,6 +139,12 @@ export function normalizeProbeExecutionFailure(
     }
 
     if (error.problem === "access-denied") {
+        if (options.backend === "native") {
+            return {
+                kind: "administrative-access-required",
+                message: "Administrative access is required to run a native hardware probe",
+            };
+        }
         return {
             kind: "permission-denied",
             message: "execution of hw-probe was denied",

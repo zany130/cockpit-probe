@@ -100,6 +100,14 @@ describe('buildLocalProbeArgv', () => {
         expect(buildLocalProbeArgv(PATH_DUMPVERSION_INVOCATION)).toEqual(['hw-probe', '-all']);
     });
 
+    it('uses an absolute PATH install with -all', () => {
+        expect(buildLocalProbeArgv({
+            kind: 'native',
+            executable: '/usr/bin/hw-probe',
+            source: 'native-path',
+        })).toEqual(['/usr/bin/hw-probe', '-all']);
+    });
+
     it('uses the user-local executable with -all', () => {
         expect(buildLocalProbeArgv({
             kind: 'native',
@@ -134,6 +142,7 @@ describe('buildLocalProbeArgv', () => {
             expect(argv.some(isUploadArgument)).toBe(false);
             expect(argv).not.toContain('-upload');
             expect(argv).not.toContain('--upload');
+            expect(argv).not.toContain('-probe');
             expect(argv.join('\0')).not.toMatch(/(^|\0)-upload(\0|$)/);
         }
     });

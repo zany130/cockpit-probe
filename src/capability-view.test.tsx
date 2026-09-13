@@ -31,11 +31,30 @@ describe('CapabilityView', () => {
         expect(screen.getByRole('heading', { name: 'hw-probe is available' })).toBeInTheDocument();
         expect(screen.getByText('Version')).toBeInTheDocument();
         expect(screen.getByText('1.6.6')).toBeInTheDocument();
-        expect(screen.getByText(/No hardware information will be uploaded/)).toBeInTheDocument();
+        expect(screen.getByText(/Native hardware probes require Cockpit administrative access/)).toBeInTheDocument();
+        expect(screen.getByText(/No probe data is uploaded by this action/)).toBeInTheDocument();
+        expect(screen.queryByText(/sudo/i)).not.toBeInTheDocument();
         screen.getByRole('button', { name: 'Run hardware probe' }).click();
         expect(onRunProbe).toHaveBeenCalledTimes(1);
         expect(screen.queryByRole('button', { name: /upload/i })).not.toBeInTheDocument();
         expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    });
+
+    it('keeps the run action when a native probe is available', () => {
+        render(
+            <CapabilityView
+                    status={{
+                        phase: 'ready',
+                        capability: { state: 'available', version: '1.6', source: 'user-local' },
+                    }}
+                    onRefresh={() => {}}
+                    execution={{ status: 'idle' }}
+                    onRunProbe={() => {}}
+                    onCancelProbe={() => {}}
+            />
+        );
+        expect(screen.getByRole('button', { name: 'Run hardware probe' })).toBeInTheDocument();
+        expect(screen.getByText(/Native hardware probes require Cockpit administrative access/)).toBeInTheDocument();
     });
 
     it('does not expose filesystem paths or Flatpak app ids in the available UI', () => {

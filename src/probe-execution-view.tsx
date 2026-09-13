@@ -24,9 +24,15 @@ interface ProbeExecutionViewProps {
     execution: ProbeExecutionState;
     onRun: () => void;
     onCancel: () => void;
+    backend?: "native" | "flatpak";
 }
 
-export const ProbeExecutionView = ({ execution, onRun, onCancel }: ProbeExecutionViewProps) => {
+export const ProbeExecutionView = ({
+    execution,
+    onRun,
+    onCancel,
+    backend = "native",
+}: ProbeExecutionViewProps) => {
     switch (execution.status) {
     case "running":
         return <RunningProbe execution={execution} onCancel={onCancel} />;
@@ -38,18 +44,31 @@ export const ProbeExecutionView = ({ execution, onRun, onCancel }: ProbeExecutio
         return <FailedProbe execution={execution} onRun={onRun} />;
     case "idle":
     default:
-        return <IdleProbe onRun={onRun} />;
+        return <IdleProbe onRun={onRun} backend={backend} />;
     }
 };
 
-const IdleProbe = ({ onRun }: { onRun: () => void }) => (
+const IdleProbe = ({
+    onRun,
+    backend,
+}: {
+    onRun: () => void;
+    backend: "native" | "flatpak";
+}) => (
     <EmptyState titleText={_("Run a local hardware probe")} headingLevel="h2">
         <EmptyStateBody>
             <p>{_("Run a local hardware probe on this system.")}</p>
-            <p>{_("No hardware information will be uploaded during this step.")}</p>
-            <p>
-                {_("The probe runs as the signed-in Cockpit user, without extra privileges. Native hw-probe currently requires root, so an unprivileged run may fail. Privileged-only hardware data can be incomplete.")}
-            </p>
+            {backend === "flatpak"
+                ? (
+                    <p>
+                        {_("This Flatpak probe runs as the signed-in Cockpit user. Sandboxing can reduce hardware visibility. No probe data is uploaded by this action.")}
+                    </p>
+                )
+                : (
+                    <p>
+                        {_("Native hardware probes require Cockpit administrative access. No probe data is uploaded by this action.")}
+                    </p>
+                )}
         </EmptyStateBody>
         <EmptyStateFooter>
             <EmptyStateActions>
@@ -153,7 +172,7 @@ const FailedProbe = ({
     onRun: () => void;
 }) => (
     <Alert
-            variant={execution.error.kind === "timeout" ? "warning" : "danger"}
+            variant={failureVariant(execution.error)}
             isInline
             title={failureTitle(execution.error)}
             actionLinks={
@@ -171,9 +190,17 @@ const FailedProbe = ({
     </Alert>
 );
 
+function failureVariant(error: ProbeExecutionError): "warning" | "danger" {
+    if (error.kind === "timeout" || error.kind === "administrative-access-required")
+        return "warning";
+    return "danger";
+}
+
 function failureTitle(error: ProbeExecutionError): string {
     if (error.kind === "timeout")
         return _("The hardware probe timed out");
+    if (error.kind === "administrative-access-required")
+        return _("Administrative access is required");
     if (error.kind === "permission-denied")
         return _("The hardware probe could not be executed with the current permissions");
     if (error.kind === "command-not-found")
@@ -186,12 +213,14 @@ function failureTitle(error: ProbeExecutionError): string {
 function failureBody(error: ProbeExecutionError): string {
     if (error.kind === "timeout")
         return _("Detection stopped before the probe finished. You can run it again. This page did not upload anything.");
+    if (error.kind === "administrative-access-required")
+        return _("Administrative access is required to run a native hardware probe. Cockpit did not start hw-probe. This page did not upload anything.");
     if (error.kind === "permission-denied")
-        return _("This page did not request extra privileges and did not upload anything.");
+        return _("The current session could not execute hw-probe. This page did not upload anything.");
     if (error.kind === "command-not-found")
         return _("hw-probe was available earlier, but it could not be started now. Refresh detection or reinstall the tool. This page did not upload anything.");
     if (error.kind === "command-failed")
-        return _("hw-probe exited before completing a local probe. Native installs currently require root; the official Flatpak may run unprivileged with less complete data. This page did not upload anything.");
+        return _("hw-probe exited before completing a local probe. This page did not upload anything.");
     return _("An unexpected error occurred while running the hardware probe. This page did not upload anything.");
 }
 

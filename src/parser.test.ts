@@ -162,10 +162,27 @@ describe('normalizeProbeExecutionFailure', () => {
         });
     });
 
-    it('maps access-denied to permission-denied', () => {
+    it('maps native privileged access-denied to administrative-access-required', () => {
         expect(normalizeProbeExecutionFailure(failure({ problem: 'access-denied' }), { backend: 'native' })).toEqual({
+            kind: 'administrative-access-required',
+            message: 'Administrative access is required to run a native hardware probe',
+        });
+    });
+
+    it('maps Flatpak access-denied to permission-denied, not a privilege error', () => {
+        expect(normalizeProbeExecutionFailure(failure({ problem: 'access-denied' }), { backend: 'flatpak' })).toEqual({
             kind: 'permission-denied',
             message: 'execution of hw-probe was denied',
+        });
+    });
+
+    it('maps a non-zero hw-probe exit to command-failed after privilege is granted', () => {
+        expect(normalizeProbeExecutionFailure(
+            failure({ problem: null, exit_status: 1 }),
+            { backend: 'native' }
+        )).toEqual({
+            kind: 'command-failed',
+            message: 'hw-probe exited with status 1',
         });
     });
 

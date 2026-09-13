@@ -14,7 +14,7 @@ This version provides:
 - detection of whether `hw-probe` is available from PATH, `~/.local/bin`, or the official Flatpak
 - installed version detection via `hw-probe -dumpversion`
 - a manual **Run Hardware Probe** action that runs a local probe
-- running, success, failure, timeout, and cancelled states
+- running, success, failure, timeout, cancelled, and administrative-access-required states
 - targeted Cancel of only the process this page started
 
 This version does **not**:
@@ -23,10 +23,11 @@ This version does **not**:
 - upload anything
 - contact linux-hardware.org
 - install packages
-- escalate privileges
+- use `sudo`, `su`, `pkexec`, or a shell
 - change Flatpak sandbox permissions
+- request administrative access on page load, refresh, or version detection
 
-The probe runs as the authenticated Cockpit user. Native `hw-probe` currently refuses to run without root and may fail until a later privilege review. Privileged-only hardware data can be incomplete. Upload is planned as a later explicit milestone.
+Version detection runs as the authenticated Cockpit user. Native `hw-probe` 1.6 requires root for the actual probe, so **Run Hardware Probe** uses Cockpit's documented privileged spawn (`superuser: "require"`) only after that button is pressed. Probe data is stored by native `hw-probe` under `/root/HW_PROBE`. The official Flatpak is still started as the signed-in user; sandboxing can reduce hardware visibility. Upload is planned as a later explicit milestone.
 
 Nothing is uploaded. Running a local hardware probe does not upload data. Uploading to linux-hardware.org is a separate explicit action (not in this version).
 
@@ -143,15 +144,17 @@ NODE_ENV=production npm run build
 
    They should match after trimming whitespace. A user-local binary should be detected even when Cockpit's process PATH does not include `~/.local/bin`. An official Flatpak install should be detected after PATH and user-local lookups fail. If both a native install and the Flatpak are present, the native version is the one shown.
 
-4. Click **Run Hardware Probe**. The page should show a running state, then success or a normalized error. Compare with the same local command in a terminal:
+4. Click **Run Hardware Probe**. Native probes request Cockpit administrative access at that moment (not during page load or version detection) and run the documented local operation `-all` without `-upload`. Compare with a privileged terminal run only for validation:
 
    ```bash
    hw-probe -all
-   ~/.local/bin/hw-probe -all
+   sudo -E ~/.local/bin/hw-probe -all
    flatpak run org.linux_hardware.hw-probe -all
    ```
 
-   Use the invocation that matches the installation Cockpit detected. The command must not include `-upload`. Native unprivileged runs currently exit with `you should run as root`; that is upstream behavior, not an upload. A successful root or Flatpak run writes `LATEST` under the upstream probe directory and prints `Local probe path: ...`.
+   Use the invocation that matches the installation Cockpit detected. The plugin does not embed `sudo`; Cockpit's privileged spawn is the production path. The command must not include `-upload`. A successful native privileged run stores probe data under `/root/HW_PROBE` and typically prints `Local probe path: /root/HW_PROBE/LATEST/hw.info`. A Flatpak run is unprivileged in this version and may see less hardware because of sandboxing.
+
+   If Cockpit denies administrative access, the page reports that administrative access is required. That is not a generic `hw-probe` command failure.
 
 5. Click **Refresh** only after the probe is idle. Refresh re-runs version detection, not a probe.
 

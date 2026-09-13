@@ -29,9 +29,14 @@ export interface SpawnProcess {
     close: (problem?: string) => void;
 }
 
+export type NativeProbeSuperuser = "require";
+
+export const NATIVE_PROBE_SUPERUSER: NativeProbeSuperuser = "require";
+
 export interface SpawnOptions {
     err?: "out" | "ignore" | "message";
     environ?: string[];
+    superuser?: NativeProbeSuperuser;
 }
 
 export type SpawnFn = (args: string[], options?: SpawnOptions) => SpawnProcess;
@@ -92,12 +97,20 @@ function closeProcess(process: SpawnProcess, problem?: string) {
 export function spawnControlled(
     spawn: SpawnFn,
     argv: readonly string[],
-    options: { timeoutMs: number; environ?: readonly string[]; timeoutMessage?: string }
+    options: {
+        timeoutMs: number;
+        environ?: readonly string[];
+        timeoutMessage?: string;
+        superuser?: NativeProbeSuperuser;
+        err?: "out" | "ignore" | "message";
+    }
 ): ControlledSpawn {
     const args = argv.slice();
-    const spawnOptions: SpawnOptions = { err: "ignore" };
+    const spawnOptions: SpawnOptions = { err: options.err ?? "ignore" };
     if (options.environ)
         spawnOptions.environ = options.environ.slice();
+    if (options.superuser === NATIVE_PROBE_SUPERUSER)
+        spawnOptions.superuser = NATIVE_PROBE_SUPERUSER;
     const process = spawn(args, spawnOptions);
 
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -168,8 +181,15 @@ export async function spawnWithTimeout(
 }
 
 export function cockpitSpawn(args: string[], options?: SpawnOptions): SpawnProcess {
-    return cockpit.spawn(args, {
+    const spawnOptions: {
+        err: "out" | "ignore" | "message";
+        environ: string[];
+        superuser?: NativeProbeSuperuser;
+    } = {
         err: options?.err ?? "ignore",
         environ: options?.environ ?? [],
-    }) as unknown as SpawnProcess;
+    };
+    if (options?.superuser === NATIVE_PROBE_SUPERUSER)
+        spawnOptions.superuser = NATIVE_PROBE_SUPERUSER;
+    return cockpit.spawn(args, spawnOptions) as unknown as SpawnProcess;
 }

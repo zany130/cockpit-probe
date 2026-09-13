@@ -20,12 +20,30 @@ describe('ProbeExecutionView', () => {
             />
         );
         expect(screen.getByText(/Run a local hardware probe on this system/)).toBeInTheDocument();
-        expect(screen.getByText(/No hardware information will be uploaded/)).toBeInTheDocument();
+        expect(screen.getByText(/Native hardware probes require Cockpit administrative access/)).toBeInTheDocument();
+        expect(screen.getByText(/No probe data is uploaded by this action/)).toBeInTheDocument();
+        expect(screen.queryByText(/sudo/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/unprivileged/i)).not.toBeInTheDocument();
         screen.getByRole('button', { name: 'Run hardware probe' }).click();
         expect(onRun).toHaveBeenCalledTimes(1);
         expect(screen.queryByRole('button', { name: /upload/i })).not.toBeInTheDocument();
         expect(screen.queryByText(/device inventory/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/findings/i)).not.toBeInTheDocument();
+    });
+
+    it('explains Flatpak sandbox limits without requesting privilege', () => {
+        render(
+            <ProbeExecutionView
+                    execution={{ status: 'idle' }}
+                    onRun={() => {}}
+                    onCancel={() => {}}
+                    backend="flatpak"
+            />
+        );
+        expect(screen.getByText(/This Flatpak probe runs as the signed-in Cockpit user/)).toBeInTheDocument();
+        expect(screen.getByText(/Sandboxing can reduce hardware visibility/)).toBeInTheDocument();
+        expect(screen.queryByText(/Native hardware probes require Cockpit administrative access/)).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Run hardware probe' })).toBeInTheDocument();
     });
 
     it('disables a second run affordance while showing a running indicator and cancel', () => {
@@ -81,7 +99,33 @@ describe('ProbeExecutionView', () => {
             />
         );
         expect(screen.getByText(/hardware probe command failed/i)).toBeInTheDocument();
+        expect(screen.queryByText(/Administrative access is required/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Native installs currently require root/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/sudo/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/stderr/i)).not.toBeInTheDocument();
+    });
+
+    it('shows an administrative-access-required state without treating it as a command failure', () => {
+        render(
+            <ProbeExecutionView
+                    execution={{
+                        status: 'failed',
+                        startedAt: 0,
+                        completedAt: 1,
+                        error: {
+                            kind: 'administrative-access-required',
+                            message: 'Administrative access is required to run a native hardware probe',
+                        },
+                    }}
+                    onRun={() => {}}
+                    onCancel={() => {}}
+            />
+        );
+        expect(screen.getByText('Administrative access is required')).toBeInTheDocument();
+        expect(screen.getByText(/Administrative access is required to run a native hardware probe/)).toBeInTheDocument();
+        expect(screen.queryByText(/hardware probe command failed/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/sudo/i)).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Run hardware probe' })).toBeInTheDocument();
     });
 
     it('shows a timeout failure', () => {

@@ -9,13 +9,23 @@ import {
     cockpitSpawn,
     HW_PROBE_SPAWN_ENVIRON,
     isSpawnFailure,
+    NATIVE_PROBE_SUPERUSER,
     PROBE_TIMEOUT_MS,
     spawnControlled,
     type ControlledSpawn,
+    type NativeProbeSuperuser,
     type SpawnFn,
 } from './spawn';
 
 export type ProbeStateListener = (state: ProbeExecutionState) => void;
+
+export function buildProbeSpawnOptions(invocation: HwProbeInvocation): {
+    superuser?: NativeProbeSuperuser;
+} {
+    if (invocation.kind === "native")
+        return { superuser: NATIVE_PROBE_SUPERUSER };
+    return {};
+}
 
 export interface ProbeController {
     getState: () => ProbeExecutionState;
@@ -67,6 +77,7 @@ export function createProbeController(options?: {
                     timeoutMs,
                     environ: HW_PROBE_SPAWN_ENVIRON,
                     timeoutMessage: "hardware probe timed out",
+                    ...buildProbeSpawnOptions(invocation),
                 });
                 handle = controlled;
                 if (cancelRequested) {

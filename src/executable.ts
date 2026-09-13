@@ -75,6 +75,10 @@ export function userLocalInvocation(home: string): NativeHwProbeInvocation | nul
     };
 }
 
+/*
+ * Current hw-probe 1.6 help documents `-all` as “Probe for hardware.”
+ * The obsolete `-probe` flag is undocumented and is not used here.
+ */
 export const HW_PROBE_LOCAL_PROBE_ARGUMENTS = ["-all"] as const;
 
 const UPLOAD_FLAGS = new Set([
@@ -113,6 +117,8 @@ export function buildLocalProbeArgv(invocation: HwProbeInvocation): string[] {
     const argv = buildHwProbeArgv(invocation, HW_PROBE_LOCAL_PROBE_ARGUMENTS);
     if (argv.some(isUploadArgument))
         throw new Error("local probe argv must not request upload");
+    if (argv.includes("-probe"))
+        throw new Error("local probe argv must not use the obsolete undocumented probe flag");
     return argv;
 }
 

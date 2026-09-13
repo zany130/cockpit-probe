@@ -4,7 +4,8 @@ type MockState =
     | 'permission-denied'
     | 'timeout'
     | 'error'
-    | 'loading';
+    | 'loading'
+    | 'admin-denied';
 
 function currentState(): MockState {
     if (typeof window === 'undefined')
@@ -14,7 +15,8 @@ function currentState(): MockState {
             value === 'permission-denied' ||
             value === 'timeout' ||
             value === 'error' ||
-            value === 'loading')
+            value === 'loading' ||
+            value === 'admin-denied')
         return value;
     return 'available';
 }
@@ -48,10 +50,14 @@ function spawn(args: string[]) {
         const delay = args.includes('-all') ? 600 : 250;
 
         window.setTimeout(() => {
-            if (state === 'available') {
+            if (state === 'available' || state === 'admin-denied') {
                 if (args.includes('-all')) {
+                    if (state === 'admin-denied') {
+                        reject({ problem: 'access-denied', exit_status: null, exit_signal: null, message: '' });
+                        return;
+                    }
                     resolve(
-                        'Probe for hardware ... Ok\nReading logs ... Ok\nLocal probe path: /home/preview/HW_PROBE/LATEST/hw.info\n'
+                        'Probe for hardware ... Ok\nReading logs ... Ok\nLocal probe path: /root/HW_PROBE/LATEST/hw.info\n'
                     );
                     return;
                 }

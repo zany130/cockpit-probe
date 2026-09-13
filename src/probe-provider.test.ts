@@ -6,9 +6,10 @@ import {
     PATH_DUMPVERSION_INVOCATION,
     isUploadArgument,
 } from './executable';
-import { createProbeController } from './probe-provider';
+import { buildProbeSpawnOptions, createProbeController } from './probe-provider';
 import {
     HW_PROBE_SPAWN_ENVIRON,
+    NATIVE_PROBE_SUPERUSER,
     type SpawnFn,
     type SpawnProcess,
 } from './spawn';
@@ -89,9 +90,27 @@ const USER_LOCAL_INVOCATION = {
     source: 'user-local' as const,
 };
 
+const PATH_ABSOLUTE_INVOCATION = {
+    kind: 'native' as const,
+    executable: '/usr/bin/hw-probe',
+    source: 'native-path' as const,
+};
+
 const NATIVE_PROBE_ARGV = buildLocalProbeArgv(PATH_DUMPVERSION_INVOCATION);
+const PATH_ABSOLUTE_PROBE_ARGV = buildLocalProbeArgv(PATH_ABSOLUTE_INVOCATION);
 const USER_LOCAL_PROBE_ARGV = buildLocalProbeArgv(USER_LOCAL_INVOCATION);
 const FLATPAK_PROBE_ARGV = buildLocalProbeArgv(FLATPAK_INVOCATION);
+
+const NATIVE_SPAWN_OPTIONS = {
+    err: 'ignore',
+    environ: [...HW_PROBE_SPAWN_ENVIRON],
+    superuser: NATIVE_PROBE_SUPERUSER,
+};
+
+const FLATPAK_SPAWN_OPTIONS = {
+    err: 'ignore',
+    environ: [...HW_PROBE_SPAWN_ENVIRON],
+};
 
 const SUCCESS_STDOUT = [
     'Probe for hardware ... Ok',
@@ -104,8 +123,28 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
+describe('buildProbeSpawnOptions', () => {
+    it('requires Cockpit administrative privilege for native probes', () => {
+        expect(buildProbeSpawnOptions(PATH_DUMPVERSION_INVOCATION)).toEqual({
+            superuser: 'require',
+        });
+        expect(buildProbeSpawnOptions(PATH_ABSOLUTE_INVOCATION)).toEqual({
+            superuser: 'require',
+        });
+        expect(buildProbeSpawnOptions(USER_LOCAL_INVOCATION)).toEqual({
+            superuser: 'require',
+        });
+        expect(buildProbeSpawnOptions(PATH_DUMPVERSION_INVOCATION).superuser).not.toBe('try');
+    });
+
+    it('does not privilege Flatpak probes', () => {
+        expect(buildProbeSpawnOptions(FLATPAK_INVOCATION)).toEqual({});
+        expect(buildProbeSpawnOptions(FLATPAK_INVOCATION)).not.toHaveProperty('superuser');
+    });
+});
+
 describe('createProbeController', () => {
-    it('runs a native PATH probe to success', async () => {
+    it('runs a native PATH probe to success with privileged spawn', async () => {
         const { spawn, calls } = fakeSpawn({
             byArgv: {
                 [argvKey(NATIVE_PROBE_ARGV)]: { stdout: SUCCESS_STDOUT },
@@ -125,15 +164,26 @@ describe('createProbeController', () => {
             artifactPath: '/root/HW_PROBE/LATEST/hw.info',
         });
         expect(calls).toHaveLength(1);
-        expect(calls[0].args).toEqual(NATIVE_PROBE_ARGV);
-        expect(calls[0].spawnOptions).toEqual({
-            err: 'ignore',
-            environ: [...HW_PROBE_SPAWN_ENVIRON],
-        });
-        expect(calls[0].spawnOptions).not.toHaveProperty('superuser');
+        expect(calls[0].args).toEqual(['hw-probe', '-all']);
+        expect(calls[0].spawnOptions).toEqual(NATIVE_SPAWN_OPTIONS);
+        expect(calls[0].spawnOptions).toMatchObject({ superuser: 'require' });
+        expect(JSON.stringify(calls[0].spawnOptions)).not.toContain('"try"');
     });
 
-    it('runs a user-local probe with the exact argv', async () => {
+    it('runs a native /usr/bin/hw-probe install with -all and superuser require', async () => {
+        const { spawn, calls } = fakeSpawn({
+            byArgv: {
+                [argvKey(PATH_ABSOLUTE_PROBE_ARGV)]: { stdout: SUCCESS_STDOUT },
+            },
+        });
+        const controller = createProbeController({ spawn, now: () => 1001 });
+        await controller.run(PATH_ABSOLUTE_INVOCATION);
+        expect(calls[0].args).toEqual(['/usr/bin/hw-probe', '-all']);
+        expect(calls[0].spawnOptions).toEqual(NATIVE_SPAWN_OPTIONS);
+        expect(controller.getState().status).toBe('succeeded');
+    });
+
+    it('runs a user-local probe with the exact argv and privileged spawn', async () => {
         const { spawn, calls } = fakeSpawn({
             byArgv: {
                 [argvKey(USER_LOCAL_PROBE_ARGV)]: { stdout: SUCCESS_STDOUT },
@@ -141,11 +191,14 @@ describe('createProbeController', () => {
         });
         const controller = createProbeController({ spawn, now: () => 5 });
         await controller.run(USER_LOCAL_INVOCATION);
-        expect(calls.map(call => call.args)).toEqual([USER_LOCAL_PROBE_ARGV]);
+        expect(calls.map(call => call.args)).toEqual([
+            ['/home/testuser/.local/bin/hw-probe', '-all'],
+        ]);
+        expect(calls[0].spawnOptions).toEqual(NATIVE_SPAWN_OPTIONS);
         expect(controller.getState().status).toBe('succeeded');
     });
 
-    it('runs a Flatpak probe with flatpak run argv', async () => {
+    it('runs a Flatpak probe unprivileged with flatpak run argv', async () => {
         const { spawn, calls } = fakeSpawn({
             byArgv: {
                 [argvKey(FLATPAK_PROBE_ARGV)]: { stdout: SUCCESS_STDOUT },
@@ -159,18 +212,21 @@ describe('createProbeController', () => {
             'org.linux_hardware.hw-probe',
             '-all',
         ]);
+        expect(calls[0].spawnOptions).toEqual(FLATPAK_SPAWN_OPTIONS);
+        expect(calls[0].spawnOptions).not.toHaveProperty('superuser');
         expect(controller.getState()).toMatchObject({
             status: 'succeeded',
             artifactPath: '/root/HW_PROBE/LATEST/hw.info',
         });
     });
 
-    it('normalizes a non-zero exit as failure', async () => {
-        const { spawn } = fakeSpawn({
+    it('normalizes a non-zero exit as a genuine command failure after privilege is granted', async () => {
+        const { spawn, calls } = fakeSpawn({
             error: commandFailedError(1),
         });
         const controller = createProbeController({ spawn, now: () => 1 });
         await controller.run(PATH_DUMPVERSION_INVOCATION);
+        expect(calls[0].spawnOptions).toMatchObject({ superuser: 'require' });
         expect(controller.getState()).toEqual({
             status: 'failed',
             startedAt: 1,
@@ -182,13 +238,32 @@ describe('createProbeController', () => {
         });
     });
 
-    it('normalizes permission-denied', async () => {
-        const { spawn } = fakeSpawn({ error: accessDeniedError() });
+    it('normalizes native privileged access-denied as administrative-access-required', async () => {
+        const { spawn, calls } = fakeSpawn({ error: accessDeniedError() });
         const controller = createProbeController({ spawn, now: () => 2 });
         await controller.run(PATH_DUMPVERSION_INVOCATION);
+        expect(calls[0].args).toEqual(['hw-probe', '-all']);
+        expect(calls[0].spawnOptions).toMatchObject({ superuser: 'require' });
+        expect(controller.getState()).toEqual({
+            status: 'failed',
+            startedAt: 2,
+            completedAt: 2,
+            error: {
+                kind: 'administrative-access-required',
+                message: 'Administrative access is required to run a native hardware probe',
+            },
+        });
+    });
+
+    it('normalizes user-local privileged access-denied as administrative-access-required', async () => {
+        const { spawn, calls } = fakeSpawn({ error: accessDeniedError() });
+        const controller = createProbeController({ spawn, now: () => 2 });
+        await controller.run(USER_LOCAL_INVOCATION);
+        expect(calls[0].args).toEqual(['/home/testuser/.local/bin/hw-probe', '-all']);
+        expect(calls[0].spawnOptions).toMatchObject({ superuser: 'require' });
         expect(controller.getState()).toMatchObject({
             status: 'failed',
-            error: { kind: 'permission-denied' },
+            error: { kind: 'administrative-access-required' },
         });
     });
 
@@ -265,12 +340,19 @@ describe('createProbeController', () => {
         for (const call of calls) {
             expect(call.args.some(isUploadArgument)).toBe(false);
             expect(call.args).toContain('-all');
+            expect(call.args).not.toContain('-probe');
             expect(call.args.join(' ')).not.toContain('-upload');
             expect(call.args[0]).not.toBe('sh');
             expect(call.args[0]).not.toBe('bash');
+            expect(call.args[0]).not.toBe('sudo');
+            expect(call.args[0]).not.toBe('pkexec');
+            expect(call.args).not.toContain('su');
         }
         expect(calls[0].args).toEqual(NATIVE_PROBE_ARGV);
+        expect(calls[0].spawnOptions).toMatchObject({ superuser: 'require' });
         expect(calls[1].args).toEqual(USER_LOCAL_PROBE_ARGV);
+        expect(calls[1].spawnOptions).toMatchObject({ superuser: 'require' });
         expect(calls[2].args).toEqual(FLATPAK_PROBE_ARGV);
+        expect(calls[2].spawnOptions).not.toHaveProperty('superuser');
     });
 });
