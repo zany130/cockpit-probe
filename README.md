@@ -215,6 +215,15 @@ This plugin was implemented and unit-tested in a Chromebook Linux container. It 
     6. If a Flatpak install is used: **Run Hardware Probe** and inventory load stay unprivileged; completeness copy warns that SMART-backed drive health may be missing.
     7. Flatpak still has no “run as root” or `flatpak override` action in this plugin.
 
+11. **Hardening checklist (v0.7)** — no new product features:
+
+    1. Refresh during a running probe stays disabled; the existing summary does not flash to a blank detecting page.
+    2. Running probe copy mentions cancel and the ten-minute wait ceiling; local probe copy says internet is not required.
+    3. Upload confirmation closes with Escape and does not upload.
+    4. After a successful upload, **View uploaded probe** is `rel="noopener noreferrer"` with `referrerpolicy="no-referrer"`.
+    5. On a phone-width Cockpit pane, Drive status / Findings / Share Probe remain readable without horizontal page overflow.
+    6. A host with many USB/hub rows still loads; extra rows are counted rather than painted all at once.
+
 On Fedora:
 
 ```bash

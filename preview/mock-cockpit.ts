@@ -57,7 +57,7 @@ function spawn(args: string[], options?: { superuser?: string }) {
             return;
         }
 
-        const delay = args.includes('-all') ? 600 : 250;
+        const delay = args.includes('-all') ? 4000 : 250;
 
         window.setTimeout(() => {
             if (state === 'available' || state === 'admin-denied' || state === 'empty-inventory' || state === 'findings-problems' || state === 'flatpak') {
