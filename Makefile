@@ -1,7 +1,7 @@
 # extract name from package.json
 PACKAGE_NAME := $(shell awk '/"name":/ {gsub(/[",]/, "", $$2); print $$2}' package.json)
 RPM_NAME := cockpit-$(PACKAGE_NAME)
-VERSION := $(shell T=$$(git describe --tags 2>/dev/null) || T=$$(node -p "require('./package.json').version" 2>/dev/null) || T=1; echo $$T | tr '-' '.')
+VERSION := $(shell node -p "require('./package.json').version")
 ifeq ($(TEST_OS),)
 TEST_OS = centos-9-stream
 endif
@@ -92,18 +92,22 @@ watch: $(NODE_MODULES_TEST) $(COCKPIT_REPO_STAMP)
 	NODE_ENV=$(NODE_ENV) ./build.js --watch
 
 clean:
-	rm -rf dist/
+	rm -rf dist/ tmp/deb
 	rm -f $(SPEC) packaging/arch/PKGBUILD
 	rm -f po/LINGUAS
 	rm -f metafile.json runtime-npm-modules.txt
+	rm -f $(RPM_NAME)_*-1_all.deb
 
 install: $(DIST_TEST) po/LINGUAS
 	mkdir -p $(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME)
 	cp -r dist/* $(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME)
+	find $(DESTDIR)$(PREFIX)/share/cockpit/$(PACKAGE_NAME) -name '*.map' -delete
 	mkdir -p $(DESTDIR)$(PREFIX)/share/metainfo/
-	msgfmt --xml -d po \
-		--template $(APPSTREAMFILE) \
-		-o $(DESTDIR)$(PREFIX)/share/metainfo/$(APPSTREAMFILE)
+	if command -v msgfmt >/dev/null 2>&1 && [ -n "$(LINGUAS)" ]; then \
+		msgfmt --xml -d po --template $(APPSTREAMFILE) -o $(DESTDIR)$(PREFIX)/share/metainfo/$(APPSTREAMFILE); \
+	else \
+		cp $(APPSTREAMFILE) $(DESTDIR)$(PREFIX)/share/metainfo/$(APPSTREAMFILE); \
+	fi
 
 # this requires a built source tree and avoids having to install anything system-wide
 devel-install: $(DIST_TEST)
@@ -161,6 +165,31 @@ rpm: $(TARFILE) $(NODE_CACHE) $(SPEC)
 	rm -r "`pwd`/rpmbuild"
 	rm -r "`pwd`/output" "`pwd`/build"
 
+DEB_PKG = $(RPM_NAME)_$(VERSION)-1_all.deb
+DEB_ROOT = $(CURDIR)/tmp/deb
+
+# convenience target: build an Architecture: all .deb with dpkg-deb
+deb: $(DEB_PKG)
+	@ls -1 $(DEB_PKG)
+
+$(DEB_PKG): export NODE_ENV=production
+$(DEB_PKG): $(DIST_TEST) packaging/debian/control.in packaging/debian/changelog packaging/debian/copyright
+	rm -rf $(DEB_ROOT)
+	$(MAKE) install DESTDIR=$(DEB_ROOT) PREFIX=/usr
+	mkdir -p $(DEB_ROOT)/usr/share/doc/$(RPM_NAME)
+	cp README.md CHANGELOG.md CONTRIBUTING.md LICENSE LICENSE-AUDIT.md \
+		$(DEB_ROOT)/usr/share/doc/$(RPM_NAME)/
+	if [ -f dist/index.js.LEGAL.txt ]; then \
+		cp dist/index.js.LEGAL.txt $(DEB_ROOT)/usr/share/doc/$(RPM_NAME)/; \
+	fi
+	cp packaging/debian/copyright $(DEB_ROOT)/usr/share/doc/$(RPM_NAME)/
+	gzip -9n -c packaging/debian/changelog > $(DEB_ROOT)/usr/share/doc/$(RPM_NAME)/changelog.Debian.gz
+	mkdir -p $(DEB_ROOT)/DEBIAN
+	size=$$(du -sk $(DEB_ROOT)/usr | cut -f1); \
+	sed -e 's/@VERSION@/$(VERSION)/' -e "s/@INSTALLED_SIZE@/$$size/" \
+		packaging/debian/control.in > $(DEB_ROOT)/DEBIAN/control
+	dpkg-deb --root-owner-group --build $(DEB_ROOT) $(DEB_PKG)
+
 # build a VM with locally built distro pkgs installed
 # disable networking, VM images have mock/pbuilder with the common build dependencies pre-installed
 $(VM_IMAGE): export XZ_OPT=-0
@@ -206,4 +235,4 @@ $(NODE_MODULES_TEST): package.json
 	for _ in `seq 3`; do timeout 10m env -u NODE_ENV npm install --ignore-scripts && exit 0; done; exit 1
 	env -u NODE_ENV npm prune
 
-.PHONY: all clean install devel-install devel-uninstall print-version dist node-cache rpm prepare-check check vm print-vm test typecheck
+.PHONY: all clean install devel-install devel-uninstall print-version dist node-cache rpm deb prepare-check check vm print-vm test typecheck

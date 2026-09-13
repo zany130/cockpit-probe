@@ -1,0 +1,5 @@
+cockpit-hardware-probe (1.0.0-1) unstable; urgency=medium
+
+  * Initial v1.0 release of the Hardware Probe Cockpit plugin.
+
+ -- Hardware Probe contributors <cockpit-devel@lists.fedorahosted.org>  Sun, 13 Sep 2026 23:12:00 +0000

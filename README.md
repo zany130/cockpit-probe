@@ -52,7 +52,9 @@ rpm-ostree install hw-probe
 
 ## Install this plugin
 
-This repository builds a noarch Fedora/Bazzite RPM. It is not claimed to be in a distro compose until a separate package review lands. The RPM **Recommends** `hw-probe` and does not run a probe or contact the network during installation.
+This repository builds a noarch Fedora/Bazzite RPM and a Debian/Ubuntu `.deb`. Neither is claimed to be in a distro compose until a separate package review lands. Both **Recommends** `hw-probe` and do not run a probe or contact the network during installation.
+
+Fedora / Bazzite (needs `rpmbuild`):
 
 ```bash
 make
@@ -60,10 +62,20 @@ make rpm
 sudo rpm -i cockpit-hardware-probe-*.rpm
 ```
 
-Uninstall:
-
 ```bash
 sudo rpm -e cockpit-hardware-probe
+```
+
+Debian / Ubuntu:
+
+```bash
+make
+make deb
+sudo apt install ./cockpit-hardware-probe_*_all.deb
+```
+
+```bash
+sudo apt remove cockpit-hardware-probe
 ```
 
 Development install (symlink `dist/` into the user Cockpit directory):

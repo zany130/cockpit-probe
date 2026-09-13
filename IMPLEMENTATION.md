@@ -1225,6 +1225,7 @@ Requirements (all addressed in-tree):
 - tests (Vitest; optional Cockpit VM `make check`)
 - CI (`.github/workflows/unit-tests.yml`)
 - Fedora/Bazzite RPM (`Recommends: hw-probe`; no probe or network during install)
+- Debian/Ubuntu `.deb` (`make deb`; same Recommends policy)
 - clean install/uninstall (`rpm -i` / `rpm -e`, plus `make devel-install` / `devel-uninstall`)
 - release-quality README
 - CHANGELOG
@@ -1333,20 +1334,21 @@ At minimum:
 
 # 16. Packaging
 
-First supported production package:
+Supported production packages:
 
-- Fedora/Bazzite RPM (`cockpit-hardware-probe`)
+- Fedora/Bazzite RPM (`make rpm`, needs `rpmbuild`)
+- Debian/Ubuntu `.deb` (`make deb`, needs `dpkg-deb`)
 
-The RPM:
+Both packages:
 
-- installs the Cockpit package under `/usr/share/cockpit/hardware-probe`
-- `Requires: cockpit-bridge`
-- `Recommends: hw-probe` (not `Requires`, so the page can show the unavailable state)
-- does not bundle hw-probe
-- does not auto-run a probe during installation
-- does not access the network during installation
-- does not enable background monitoring
-- uninstalls with `rpm -e cockpit-hardware-probe`
+- install under `/usr/share/cockpit/hardware-probe`
+- depend on `cockpit-bridge`
+- **Recommends** `hw-probe` (not a hard Depends/Requires, so the page can show the unavailable state)
+- do not bundle hw-probe
+- do not auto-run a probe during installation
+- do not access the network during installation
+- do not enable background monitoring
+- uninstall with `rpm -e cockpit-hardware-probe` or `apt remove cockpit-hardware-probe`
 
 Do not claim distro compose support that has not been tested. Arch PKGBUILD remains untested leftover packaging.
 

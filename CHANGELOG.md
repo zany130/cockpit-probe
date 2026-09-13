@@ -16,7 +16,7 @@ First stable Cockpit plugin around `hw-probe`.
 - Validated `https://linux-hardware.org/?probe=…` result links (`noopener noreferrer`, `referrerpolicy=no-referrer`).
 - After a successful upload, empty local-probe state plus this session’s public URL. hw-probe’s deletion of `LATEST` is not reported as an inventory read failure.
 - Refresh that keeps the current summary, 10-minute hang ceilings, cancel, 80-row display caps, and a usable narrow Cockpit pane.
-- Fedora/Bazzite RPM (`Recommends: hw-probe`), unit-test CI, and release documentation.
+- Fedora/Bazzite RPM (`Recommends: hw-probe`), Debian/Ubuntu `.deb` (`make deb`), unit-test CI, and release documentation.
 
 ### Security
 

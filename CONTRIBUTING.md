@@ -40,7 +40,7 @@ Do not add `hw-probe -check`, automatic upload, a health score, `sudo`, a shell,
 ```text
 src/           plugin UI, providers, parsers, tests
 preview/       mocked Cockpit for local UI review
-packaging/     Fedora spec and Arch PKGBUILD templates
+packaging/     Fedora spec, Debian package, Arch PKGBUILD template
 test/          optional Cockpit VM browser tests
 ```
 
@@ -48,7 +48,7 @@ Prefer an official Cockpit API (`cockpit.spawn` with argv, `cockpit.file`) over 
 
 ## Packaging
 
-`make rpm` builds `cockpit-hardware-probe`. The spec **Recommends** `hw-probe` and must not run a probe or touch the network during install.
+`make rpm` builds the Fedora package (requires `rpmbuild`). `make deb` builds `cockpit-hardware-probe_*_all.deb` with `dpkg-deb`. Both **Recommends** `hw-probe` and must not run a probe or touch the network during install.
 
 Arch packaging is a Starter Kit leftover and is not a supported 1.0 target.
 

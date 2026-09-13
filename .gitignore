@@ -16,6 +16,9 @@ coverage/
 /Test*.log.gz
 /Test*.png
 /*.whl
+/*.deb
+/*.buildinfo
+/*.changes
 /bots
 /cockpit-*.spec
 /cockpit-*.tar.xz
@@ -32,7 +35,6 @@ coverage/
 
 # subdirs (/subdir/...)
 /packaging/arch/PKGBUILD
-/packaging/debian/changelog
 /po/*.pot
 /po/LINGUAS
 /test/common/

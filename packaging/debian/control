@@ -1,0 +1,24 @@
+Source: cockpit-hardware-probe
+Section: admin
+Priority: optional
+Maintainer: Hardware Probe contributors <cockpit-devel@lists.fedorahosted.org>
+Build-Depends: debhelper-compat (= 13),
+               gettext,
+               make
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://linux-hardware.org/
+
+Package: cockpit-hardware-probe
+Architecture: all
+Multi-Arch: foreign
+Depends: ${misc:Depends},
+         cockpit-bridge
+Recommends: hw-probe
+Description: Cockpit UI around hw-probe
+ Cockpit plugin around hw-probe. It can run a local hardware probe, show a
+ hardware summary and conservative findings, and optionally upload a probe
+ to linux-hardware.org after explicit confirmation.
+ .
+ Running a local hardware probe does not upload data. Uploading to
+ linux-hardware.org is a separate explicit action.

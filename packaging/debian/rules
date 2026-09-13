@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+export PREFIX=/usr
+
+%:
+	dh $@
+
+override_dh_auto_clean:
+	# Don't call `make clean`; in a release tarball dist/ is precious.
+	rm -f po/LINGUAS
+
+override_dh_auto_test:
+	# `make check` is the Cockpit VM integration test, not a package build test.
+
+override_dh_auto_install:
+	$(MAKE) install DESTDIR=$(CURDIR)/debian/cockpit-hardware-probe PREFIX=/usr
