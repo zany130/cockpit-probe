@@ -31,7 +31,7 @@ describe('CapabilityView', () => {
             />
         );
         expect(screen.getByText('1.6.6')).toBeInTheDocument();
-        expect(screen.getByText(/hw-probe/)).toBeInTheDocument();
+        expect(screen.getAllByText(/hw-probe/).length).toBeGreaterThanOrEqual(1);
         expect(screen.getByText(/Native hardware probes require Cockpit administrative access/)).toBeInTheDocument();
         expect(screen.getByText(/No probe data is uploaded by this action/)).toBeInTheDocument();
         expect(screen.queryByText(/sudo/i)).not.toBeInTheDocument();

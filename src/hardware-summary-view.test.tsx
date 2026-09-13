@@ -46,7 +46,7 @@ describe('HardwareSummaryView', () => {
         expect(screen.queryByText(/Problems detected/)).not.toBeInTheDocument();
         expect(screen.queryByText('Critical')).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /upload/i })).not.toBeInTheDocument();
-        expect(screen.getByText(/not a health score/)).toBeInTheDocument();
+        expect(screen.getAllByText(/not a health score/).length).toBeGreaterThanOrEqual(2);
         expect(screen.queryByText(/pci:1002/)).not.toBeInTheDocument();
         expect(screen.queryByText(/1002-744c/)).not.toBeInTheDocument();
         expect(screen.getByText('Hardware Findings')).toBeInTheDocument();
