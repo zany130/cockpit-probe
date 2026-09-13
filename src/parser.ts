@@ -43,7 +43,10 @@ export function parseHwProbeVersion(stdout: string): VersionParseResult {
     if (hasDisallowedCharacters(stdout))
         return { ok: false, error: malformedOutputError() };
 
-    const normalized = stdout.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const normalized = stdout
+            .replace(/^\uFEFF/, "")
+            .replace(/\r\n/g, "\n")
+            .replace(/\r/g, "\n");
     const lines = normalized.split("\n");
     const contentLines = lines.filter(line => line.trim() !== "");
 

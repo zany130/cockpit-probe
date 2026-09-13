@@ -12,13 +12,20 @@ import {
 } from './spawn';
 
 function deferred<T>() {
-    let resolve!: (value: T | PromiseLike<T>) => void;
-    let reject!: (reason?: unknown) => void;
-    const promise = new Promise<T>((res, rej) => {
-        resolve = res;
-        reject = rej;
+    const pending: {
+        promise: Promise<T>;
+        resolve: (value: T | PromiseLike<T>) => void;
+        reject: (reason?: unknown) => void;
+    } = {
+        promise: Promise.resolve() as Promise<T>,
+        resolve: () => undefined,
+        reject: () => undefined,
+    };
+    pending.promise = new Promise<T>((resolve, reject) => {
+        pending.resolve = resolve;
+        pending.reject = reject;
     });
-    return { promise, resolve, reject };
+    return pending;
 }
 
 function fakeSpawn(options: {
@@ -30,7 +37,10 @@ function fakeSpawn(options: {
     const calls: Array<{ args: string[]; spawnOptions?: object }> = [];
 
     const spawn: SpawnFn = (args, spawnOptions) => {
-        calls.push({ args, spawnOptions });
+        const call: { args: string[]; spawnOptions?: object } = { args };
+        if (spawnOptions !== undefined)
+            call.spawnOptions = spawnOptions;
+        calls.push(call);
         const result = deferred<string>();
         if (!options.hang) {
             if (options.error !== undefined)
@@ -129,6 +139,22 @@ describe('detectHwProbeCapability', () => {
                 message: 'hw-probe exited with status 1',
             },
         });
+    });
+
+    it('returns timeout when the version query hangs', async () => {
+        vi.useFakeTimers();
+        const { spawn, close } = fakeSpawn({ hang: true });
+        const pending = detectHwProbeCapability(spawn);
+        const expectTimeout = expect(pending).resolves.toEqual({
+            state: 'timeout',
+            error: {
+                kind: 'timeout',
+                message: 'hw-probe version query timed out',
+            },
+        });
+        await vi.advanceTimersByTimeAsync(CAPABILITY_TIMEOUT_MS);
+        await expectTimeout;
+        expect(close).toHaveBeenCalledWith('timeout');
     });
 
     it('uses only the dumpversion argv', async () => {

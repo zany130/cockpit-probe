@@ -58,9 +58,9 @@ function asStringOutput(value: unknown): string {
 }
 
 export async function spawnWithTimeout(
-        spawn: SpawnFn,
-        argv: readonly string[],
-        options: { timeoutMs: number; environ?: readonly string[] }
+    spawn: SpawnFn,
+    argv: readonly string[],
+    options: { timeoutMs: number; environ?: readonly string[] }
 ): Promise<string> {
     const args = argv.slice();
     const spawnOptions: SpawnOptions = { err: "ignore" };
@@ -100,5 +100,8 @@ export async function spawnWithTimeout(
 }
 
 export function cockpitSpawn(args: string[], options?: SpawnOptions): SpawnProcess {
-    return cockpit.spawn(args, options) as SpawnProcess;
+    return cockpit.spawn(args, {
+        err: options?.err ?? "ignore",
+        environ: options?.environ ?? [],
+    }) as unknown as SpawnProcess;
 }

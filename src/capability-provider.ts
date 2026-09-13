@@ -14,7 +14,7 @@ import {
 } from './spawn';
 
 export async function detectHwProbeCapability(
-        spawn: SpawnFn = cockpitSpawn
+    spawn: SpawnFn = cockpitSpawn
 ): Promise<HwProbeCapability> {
     try {
         const stdout = await spawnWithTimeout(spawn, HW_PROBE_DUMPVERSION_ARGV, {
