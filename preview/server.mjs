@@ -84,5 +84,5 @@ const server = http.createServer((req, res) => {
 
 server.listen(port, '127.0.0.1', () => {
     console.log(`Hardware Probe preview: http://127.0.0.1:${port}/`);
-    console.log('Mock states: ?state=available|unavailable|permission-denied|timeout|error|loading');
+    console.log('Mock states: ?state=available|unavailable|permission-denied|timeout|error|loading|admin-denied');
 });
