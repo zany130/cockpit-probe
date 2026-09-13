@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { Page, PageSection } from '@patternfly/react-core/dist/esm/components/Page/index.js';
 import { Title } from '@patternfly/react-core/dist/esm/components/Title/index.js';
@@ -58,7 +58,12 @@ export const Application = () => {
         const invocation = invocationRef.current;
         if (invocation == null)
             return;
-        uploadRef.current.run(invocation).then(() => undefined, () => undefined);
+        uploadRef.current.run(invocation).then(() => {
+            if (uploadRef.current.getState().status !== "succeeded")
+                return;
+            inventorySessionRef.current.replace({ status: "empty" }, setInventory);
+            controllerRef.current.reset();
+        }, () => undefined);
     }, []);
 
     const cancelUpload = useCallback(() => {
@@ -136,11 +141,12 @@ export const Application = () => {
         loadInventory(invocation, execution, true);
     }, [execution, loadInventory]);
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (upload.status !== "succeeded")
             return;
         // hw-probe deletes LATEST after a successful -upload. Treat that as
-        // no local probe, not as a missing-inventory read failure.
+        // no local probe, not as a missing-inventory read failure. Layout
+        // timing avoids painting the old summary after success.
         inventorySessionRef.current.replace({ status: "empty" }, setInventory);
         controllerRef.current.reset();
     }, [upload]);
