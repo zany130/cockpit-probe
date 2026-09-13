@@ -55,7 +55,7 @@ describe('CapabilityView', () => {
             />
         );
         expect(screen.getByRole('button', { name: 'Run hardware probe' })).toBeInTheDocument();
-        expect(screen.getByText(/Native hardware probes require Cockpit administrative access/)).toBeInTheDocument();
+        expect(screen.getByText(/Native hardware probes require Cockpit administrative access because hw-probe itself requires root/)).toBeInTheDocument();
     });
 
     it('does not expose filesystem paths or Flatpak app ids in the available UI', () => {
@@ -242,6 +242,7 @@ describe('CapabilityView', () => {
             />
         );
         expect(screen.getByText('Hardware Summary')).toBeInTheDocument();
+        expect(screen.getByText('Drive status')).toBeInTheDocument();
         expect(screen.getByText('Hardware Findings')).toBeInTheDocument();
         expect(screen.getByText(/completed successfully/)).toBeInTheDocument();
         expect(screen.queryByText(/hardware probe command failed/i)).not.toBeInTheDocument();

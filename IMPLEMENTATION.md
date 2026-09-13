@@ -227,7 +227,7 @@ Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master`, current `
 - Capability/version detection remains unprivileged. Privilege is requested only after **Run Hardware Probe**. The page itself is not privileged. Cockpit's existing administrative authentication UI is used; this plugin does not reproduce it.
 - Native argv uses the v0.1 resolved absolute executable (`hw-probe` from PATH, `/usr/bin/hw-probe` when that is the resolved path, or `/home/<user>/.local/bin/hw-probe`). Because root executes that absolute path, PATH is not reconstructed and no shell is used.
 - Official Flatpak metadata indicates root is needed for complete hard-drive health access, not that all probing requires root. v0.2 therefore runs `["flatpak", "run", "org.linux_hardware.hw-probe", "-all"]` as the authenticated Cockpit user, **without** `superuser: "require"`. Do not add `flatpak override`. Sandboxing can reduce hardware visibility relative to a native privileged probe.
-- The broader v0.6 privilege/extended-data review remains for later; this native-probe privilege is only the v0.2 correction required by real-host evidence.
+- v0.6 later confirmed this native-probe privilege is the full justified scope; no additional privileged operations were added. See §4.6.
 
 **Cockpit cancellation**
 
@@ -417,6 +417,42 @@ Timeout: `UPLOAD_TIMEOUT_MS` = 10 minutes (hang ceiling). Cancellation: `process
 - No remediation / package / driver / firmware actions
 
 This is the first milestone allowed to cause an external network request, and only through hw-probe after explicit confirmation.
+
+### 4.6 v0.6 upstream verification (2026-09-13)
+
+Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master` (`Probe` root gate ~19045, `setDriveStatus`, `smartctl` collection gated on `$Admin`, Flatpak warning ~19554, official README Flatpak “Run it as root if you want to check your hard drives health”), Cockpit `superuser: "require"` spawn/file APIs already used in v0.2–v0.5, and Flatpak sandbox discussion that SMART needs block-device access and typically root. This environment did **not** compare privileged vs unprivileged inventories on Bazzite.
+
+**Native Probe**
+
+- Non-Snap/non-Flatpak `Probe` still hard-fails without root (`ERROR: you should run as root`, `exitStatus(1)`). There is no useful unprivileged native `-all`.
+- v0.2 already runs native `-all` with `cockpit.spawn(..., { superuser: "require" })`. v0.3 already reads the two trusted inventory files with `cockpit.file(..., { superuser: "require" })`. v0.5 already privileges native `-upload` the same way.
+- Adding a second privileged native command would not collect additional Status fields beyond what privileged `-all` already wrote.
+
+**SMART / drive health**
+
+- `smartctl` runs during `-all` logs only when `$Admin and $SmartctlCmd`.
+- `setDriveStatus()` maps `result: PASSED` / `SMART Health Status: OK` → `works`, and `FAILED` / `FAIL` → `failed`, then `writeDevs()` stores that Status. Full SMART attribute text is written to `logs/smartctl` (serials, WWNs already filtered by hw-probe, still not a stable UI API).
+- v0.3 does not read `logs/`. v0.6 does not add that read. SMART dashboards remain post-1.0.
+- Therefore the conservative product surface is the existing disk `Status` field, explained honestly.
+
+**Flatpak**
+
+- Flatpak `Probe` prints a warning and continues without root. A later warning: “not all hardware monitoring features are available when using Flatpak or Snap as a non-root user.”
+- Official README: run as root to check hard-drive health. Doing `flatpak run` under Cockpit `superuser: "require"` would execute as root with root’s `XDG_DATA_HOME`, so the v0.3 unprivileged user data-dir read would miss the probe. `flatpak override` / extra device permissions are out of scope.
+- Decision: keep Flatpak probe and inventory **unprivileged**. Disclose the SMART/completeness gap. Do not pretend parity.
+
+**Decision: do not add more privileged operations**
+
+Privilege already present (native `-all`, native two-file inventory read, native `-upload`) is the justified, narrow scope. Do not:
+
+- privilege capability detection
+- privilege Flatpak spawn or inventory
+- use `sudo` / `su` / `pkexec`
+- use `superuser: "try"`
+- run `-check` to obtain drive data
+- parse `logs/smartctl`
+
+Unprivileged mode that remains useful: version detection; Flatpak local probe and inventory (possibly without SMART); page load until a native privileged read is required.
 
 ---
 
@@ -863,16 +899,11 @@ First determine:
 
 Root should only be introduced when there is demonstrated product value.
 
-For example, upstream notes that elevated access may be necessary for complete drive health information.
+v0.6 conclusion: native Probe already requires root, so the plugin already uses Cockpit administrative access for native `-all`, the two trusted inventory files, and native `-upload`. That is the demonstrated product value. A separate “extended storage health” action is not added because SMART health is already folded into disk Status during privileged `-all`, and reading `logs/smartctl` would be a SMART dashboard (post-1.0) plus extra sensitive log parsing.
 
-That does not mean the entire UI should always execute `hw-probe` as root.
+Unprivileged remains: capability/version detection, and the entire Flatpak path (with an honest completeness gap).
 
-Potential future model:
-
-- standard probe: normal user
-- extended storage health probe: privileged, explicit action
-
-Do not implement this split until researched.
+Do not implement a second privilege split unless later evidence shows Status-only disk data is insufficient for the local inspection product.
 
 ---
 
@@ -1115,16 +1146,20 @@ Examples may include drive-health information.
 
 Do not assume root is required globally.
 
-If privileged probing is justified:
+Status (2026-09-13): **no additional privileged operations**. Native `-all` / inventory read / `-upload` already use Cockpit `superuser: "require"` because hw-probe itself requires root. Flatpak stays unprivileged. SMART-derived disk Status from privileged `-all` is explained in a **Drive status** section; full SMART logs are not parsed. See §4.6.
 
-- use documented Cockpit privilege mechanisms
-- make privilege explicit in UI
-- scope it narrowly
-- never use `sudo`
-- test permission denial
-- maintain useful unprivileged mode
+Implemented:
 
-If privilege provides little additional value, do not add it.
+- research of native root gate, SMART collection, and Flatpak completeness
+- conservative Drive status from existing `type=disk` Status (PASSED/FAILED mapping documented, not a SMART dashboard)
+- explicit completeness notes for native vs Flatpak
+- empty-state privilege copy before Run Hardware Probe
+- tests that privilege is not expanded (no logs/smartctl, no Flatpak superuser, no `-check`)
+- permission-denial coverage remains the existing native `access-denied` paths
+
+Do not start v0.7 from this milestone.
+
+Real-host gate (operator): compare a native privileged probe’s disk Status with `smartctl` on Bazzite if desired; this environment cannot mark that passed. Confirm Flatpak (if used) still runs without an admin prompt and shows the completeness note.
 
 ---
 

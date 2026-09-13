@@ -77,12 +77,12 @@ const IdleProbe = ({
             {backend === "flatpak"
                 ? (
                     <p>
-                        {_("This Flatpak probe runs as the signed-in Cockpit user. Sandboxing can reduce hardware visibility. No probe data is uploaded by this action.")}
+                        {_("This Flatpak probe runs as the signed-in Cockpit user. Sandboxing can reduce hardware visibility. hw-probe collects SMART only as administrator, so drive health may be missing. No probe data is uploaded by this action.")}
                     </p>
                 )
                 : (
                     <p>
-                        {_("Native hardware probes require Cockpit administrative access. No probe data is uploaded by this action.")}
+                        {_("Native hardware probes require Cockpit administrative access because hw-probe itself requires root. Version detection does not. No probe data is uploaded by this action.")}
                     </p>
                 )}
         </EmptyStateBody>

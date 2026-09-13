@@ -20,7 +20,7 @@ describe('ProbeExecutionView', () => {
             />
         );
         expect(screen.getByText(/Run a local hardware probe on this system/)).toBeInTheDocument();
-        expect(screen.getByText(/Native hardware probes require Cockpit administrative access/)).toBeInTheDocument();
+        expect(screen.getByText(/Native hardware probes require Cockpit administrative access because hw-probe itself requires root/)).toBeInTheDocument();
         expect(screen.getByText(/No probe data is uploaded by this action/)).toBeInTheDocument();
         expect(screen.queryByText(/sudo/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/unprivileged/i)).not.toBeInTheDocument();
@@ -42,6 +42,7 @@ describe('ProbeExecutionView', () => {
         );
         expect(screen.getByText(/This Flatpak probe runs as the signed-in Cockpit user/)).toBeInTheDocument();
         expect(screen.getByText(/Sandboxing can reduce hardware visibility/)).toBeInTheDocument();
+        expect(screen.getByText(/drive health may be missing/)).toBeInTheDocument();
         expect(screen.queryByText(/Native hardware probes require Cockpit administrative access/)).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Run hardware probe' })).toBeInTheDocument();
     });

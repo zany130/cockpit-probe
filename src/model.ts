@@ -209,6 +209,22 @@ export interface HardwareFindingsSummary {
     source: FindingSource;
 }
 
+export type DriveStatusKind = "works" | "detected" | "failed" | "other";
+
+export interface DriveStatusCounts {
+    works: number;
+    detected: number;
+    failed: number;
+    other: number;
+    total: number;
+}
+
+export interface DriveStatusSummary {
+    disks: HardwareDevice[];
+    counts: DriveStatusCounts;
+    source: FindingSource;
+}
+
 export type UploadErrorKind =
     | "administrative-access-required"
     | "no-local-probe"

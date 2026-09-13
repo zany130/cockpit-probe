@@ -35,8 +35,10 @@ import type {
     UploadState,
 } from './model';
 import { deviceLabel, formatDeviceStatus } from './device-display';
+import { DriveStatusView } from './drive-status-view';
 import { HardwareFindingsView } from './hardware-findings-view';
 import { buildSystemTitle } from './inventory-normalizer';
+import { ProbeCompletenessNote } from './probe-completeness-note';
 import { ShareProbeView } from './share-probe-view';
 
 const _ = cockpit.gettext;
@@ -72,7 +74,11 @@ export const HardwareSummaryView = ({
     case "empty":
         return (
             <>
-                <EmptyInventory onRunProbe={onRunProbe} probeRunning={probeRunning} />
+                <EmptyInventory
+                        onRunProbe={onRunProbe}
+                        probeRunning={probeRunning}
+                        backend={uploadBackend}
+                />
                 {onRequestUpload && onCancelUpload && upload && (
                     <ShareProbeView
                             canUpload={false}
@@ -107,13 +113,26 @@ export const HardwareSummaryView = ({
 const EmptyInventory = ({
     onRunProbe,
     probeRunning,
+    backend,
 }: {
     onRunProbe?: (() => void) | undefined;
     probeRunning: boolean;
+    backend: "native" | "flatpak";
 }) => (
     <EmptyState titleText={_("No local hardware probe is available yet")} headingLevel="h2">
         <EmptyStateBody>
-            {_("Run a local hardware probe to build a hardware summary. Nothing is uploaded.")}
+            <p>{_("Run a local hardware probe to build a hardware summary. Nothing is uploaded.")}</p>
+            {backend === "flatpak"
+                ? (
+                    <p>
+                        {_("This Flatpak probe runs as the signed-in Cockpit user. Drive health (SMART) is collected only when hw-probe runs as administrator, so it may be missing.")}
+                    </p>
+                )
+                : (
+                    <p>
+                        {_("Native hardware probes require Cockpit administrative access because hw-probe itself requires root. Version detection does not.")}
+                    </p>
+                )}
         </EmptyStateBody>
         {onRunProbe && !probeRunning && (
             <EmptyStateFooter>
@@ -201,6 +220,7 @@ const ReadyInventory = ({
         <p className="hw-probe-summary-note">
             {_("Device status is what hw-probe reported. It is not a health score.")}
         </p>
+        <ProbeCompletenessNote backend={uploadBackend} />
         <Gallery hasGutter minWidths={{ default: "16rem" }} className="hw-probe-overview">
             <GalleryItem>
                 <OverviewCard title={_("System")}>
@@ -233,6 +253,7 @@ const ReadyInventory = ({
                 </OverviewCard>
             </GalleryItem>
         </Gallery>
+        <DriveStatusView summary={summary} backend={uploadBackend} />
         <HardwareFindingsView summary={summary} />
         <DeviceInventory summary={summary} />
         {onRequestUpload && onCancelUpload && upload && (

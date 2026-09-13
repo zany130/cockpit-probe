@@ -51,6 +51,7 @@ describe('HardwareSummaryView', () => {
         expect(screen.queryByText(/1002-744c/)).not.toBeInTheDocument();
         expect(screen.getByText('Hardware Findings')).toBeInTheDocument();
         expect(screen.getByText(/No problems are reported in the available hw-probe data/)).toBeInTheDocument();
+        expect(screen.getByText('Drive status')).toBeInTheDocument();
         expect(screen.queryByText('Share Probe')).not.toBeInTheDocument();
     });
 
@@ -91,6 +92,7 @@ describe('HardwareSummaryView', () => {
         expect(onRun).toHaveBeenCalledTimes(1);
         expect(screen.queryByRole('button', { name: /upload/i })).not.toBeInTheDocument();
         expect(screen.getByText(/Nothing is uploaded/)).toBeInTheDocument();
+        expect(screen.getByText(/Native hardware probes require Cockpit administrative access because hw-probe itself requires root/)).toBeInTheDocument();
     });
 
     it('distinguishes inventory parse failure from a probe command failure', () => {
@@ -135,11 +137,38 @@ describe('HardwareSummaryView', () => {
             />
         );
         const summary = screen.getByText('Hardware Summary');
+        const drive = screen.getByText('Drive status');
         const findings = screen.getByText('Hardware Findings');
         const share = screen.getByText('Share Probe');
-        expect(summary.compareDocumentPosition(findings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(summary.compareDocumentPosition(drive) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(drive.compareDocumentPosition(findings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
         expect(findings.compareDocumentPosition(share) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(screen.getByText(/Administrative access was used only for this native probe/)).toBeInTheDocument();
         expect(onRequestUpload).not.toHaveBeenCalled();
         expect(screen.getByRole('button', { name: 'Upload probe to linux-hardware.org' }).className).toContain('pf-m-secondary');
+    });
+
+    it('explains the Flatpak completeness gap without requesting extra privilege', () => {
+        render(
+            <HardwareSummaryView
+                    inventory={{ status: 'ready', summary: readySummary() }}
+                    uploadBackend="flatpak"
+            />
+        );
+        expect(screen.getByText(/unprivileged Flatpak probe/)).toBeInTheDocument();
+        expect(screen.getByText(/Flatpak probes may not include drive health/)).toBeInTheDocument();
+        expect(screen.queryByText(/Administrative access was used only for this native probe/)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /run as root|elevate|override/i })).not.toBeInTheDocument();
+    });
+
+    it('explains Flatpak SMART limits in the empty inventory', () => {
+        render(
+            <HardwareSummaryView
+                    inventory={{ status: 'empty' }}
+                    uploadBackend="flatpak"
+            />
+        );
+        expect(screen.getByText(/Drive health \(SMART\) is collected only when hw-probe runs as administrator/)).toBeInTheDocument();
+        expect(screen.queryByText(/Native hardware probes require Cockpit administrative access/)).not.toBeInTheDocument();
     });
 });

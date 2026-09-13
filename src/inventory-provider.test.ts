@@ -65,6 +65,8 @@ describe('loadHardwareInventory', () => {
         ]);
         expect(nativeInventoryPaths().host).toBe('/root/HW_PROBE/LATEST/hw.info/host');
         expect(JSON.stringify(calls)).not.toContain('/var/roothome');
+        expect(JSON.stringify(calls)).not.toContain('/logs/');
+        expect(JSON.stringify(calls)).not.toContain('smartctl');
         expect(calls.every(call => call.superuser !== 'try')).toBe(true);
     });
 

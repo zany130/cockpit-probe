@@ -6,19 +6,17 @@ A Cockpit plugin that provides a native web UI around [`hw-probe`](https://githu
 
 ## Current status
 
-**v0.5 — Explicit Upload to linux-hardware.org**
+**v0.6 — Privilege and extended data review**
 
-This version provides everything in v0.4, plus an optional **Share Probe** action.
+This version keeps v0.5 upload behavior and does **not** add another privileged command.
 
-Probes stay local until you choose otherwise. Nothing is uploaded on page load, during version detection, during **Run Hardware Probe**, while parsing, or while deriving findings.
+Native `hw-probe -all` already requires root. Cockpit administrative access is used only for that native probe, reading its privileged inventory, and native upload. Version detection stays unprivileged.
 
-**Upload Probe** opens a confirmation dialog first. Confirming runs `hw-probe -upload` on the existing local LATEST probe (not `-all -upload`, so it does not hide a second hardware scan). Native uploads use Cockpit administrative access (`superuser: "require"`). Flatpak uploads run as the signed-in user.
+Drive **Works** / **Failed** can include SMART PASSED/FAILED from a privileged `-all`. This page still does not show SMART attributes, temperatures, or a health score. It does not read `logs/smartctl`, run `-check`, or use `sudo`.
 
-hw-probe applies its own privacy filtering. Upstream says usernames, hostnames, IP addresses, MAC addresses, UUIDs, and serial numbers are not uploaded directly. A 32-byte prefix of a salted SHA512 hash of MAC addresses and serial numbers is still uploaded for deduplication; UUIDs are transformed the same way. Upstream warns that filtering can fail in some edge cases. This is not complete anonymity, and this plugin cannot undo an upload.
+Flatpak probes stay unprivileged. SMART and some hardware details may be missing; the UI says so. This plugin does not change Flatpak sandbox permissions.
 
-After a successful upload, hw-probe removes its local LATEST copy. This page keeps the summary already loaded until you refresh or run a new probe. There is no upload history yet.
-
-If hw-probe returns a validated `https://linux-hardware.org/?probe=…` address, **View uploaded probe** is an explicit external link. It does not open automatically.
+Optional **Share Probe** from v0.5 is unchanged: nothing is uploaded unless you confirm `hw-probe -upload`. hw-probe applies its own privacy filtering; this is not complete anonymity.
 
 This version still does **not**:
 
@@ -39,7 +37,7 @@ The intended product workflow is:
 local probe → inspect summary → optional explicit upload
 ```
 
-v0.5 covers local probe execution, the hardware summary, conservative findings, and optional upload to linux-hardware.org.
+v0.6 covers local probe execution, the hardware summary, conservative findings, optional upload, and an honest privilege/drive-status review.
 
 ## Package name
 
@@ -119,9 +117,9 @@ npm test
 NODE_ENV=production npm run build
 ```
 
-`npm test` runs Vitest unit tests for parsers, providers, spawn timeout, probe execution, inventory, findings, upload, and UI states.
+`npm test` runs Vitest unit tests for parsers, providers, spawn timeout, probe execution, inventory, findings, upload, drive status, and UI states.
 
-`make check` is the optional Cockpit VM integration test from the Starter Kit. It is not required for v0.5 unit validation. The plugin does not run `hw-probe -check`.
+`make check` is the optional Cockpit VM integration test from the Starter Kit. It is not required for v0.6 unit validation. The plugin does not run `hw-probe -check`.
 
 ## Real-host verification (Bazzite / Fedora)
 
@@ -158,7 +156,9 @@ This plugin was implemented and unit-tested in a Chromebook Linux container. It 
    - Two network adapters appear
    - The host `hwaddr` value is **nowhere** in the UI
    - Low-level devices remain available under **Devices** / **Other devices**
-   - There is no Upload action, no `-check`, and no health score
+   - There is no `-check` and no health score
+   - **Drive status** lists `type=disk` devices using the same Status field (Works / Detected / Failed), not SMART attributes
+   - Native completeness copy says administrative access was used because hw-probe itself requires root — not because this plugin added extra commands
    - **Hardware Findings** loads from the same local probe (not a second file format)
    - Devices with status `works` are counted as Works, not as “healthy”
    - Devices with status `detected` are **not** called broken, unhealthy, warning, or critical
@@ -200,6 +200,16 @@ This plugin was implemented and unit-tested in a Chromebook Linux container. It 
    12. A failed upload does not mark the local probe as failed.
    13. Refresh does not repeat the upload.
    14. **Try again** asks for confirmation again.
+
+10. **Privilege and drive-status checklist (v0.6)** — this milestone does **not** add another privileged command:
+
+    1. Opening Hardware Probe still does not prompt for administrative access until a native inventory read, **Run Hardware Probe**, or native **Upload Probe**.
+    2. Native idle copy says Hardware Probe needs extra privilege because hw-probe itself requires root.
+    3. After a native probe, **Drive status** appears between **Hardware Summary** and **Hardware Findings**.
+    4. Disk Works / Failed can match SMART PASSED/FAILED from that privileged `-all`. There is still no SMART attribute table, temperature, or health score.
+    5. The page does not read `logs/smartctl`, does not run `-check`, and does not use `sudo`.
+    6. If a Flatpak install is used: **Run Hardware Probe** and inventory load stay unprivileged; completeness copy warns that SMART-backed drive health may be missing.
+    7. Flatpak still has no “run as root” or `flatpak override` action in this plugin.
 
 On Fedora:
 

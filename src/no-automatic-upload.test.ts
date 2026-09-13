@@ -10,6 +10,7 @@ import findingsSource from './findings-normalizer.ts?raw';
 import parserSource from './parser.ts?raw';
 import hostParserSource from './host-parser.ts?raw';
 import deviceParserSource from './device-parser.ts?raw';
+import driveStatusSource from './drive-status.ts?raw';
 import findingsViewSource from './hardware-findings-view.tsx?raw';
 import probeViewSource from './probe-execution-view.tsx?raw';
 
@@ -20,6 +21,7 @@ const LOCAL_ONLY_SOURCES: Record<string, string> = {
     'inventory-normalizer.ts': inventoryNormalizerSource,
     'inventory-paths.ts': inventoryPathsSource,
     'findings-normalizer.ts': findingsSource,
+    'drive-status.ts': driveStatusSource,
     'parser.ts': parserSource,
     'host-parser.ts': hostParserSource,
     'device-parser.ts': deviceParserSource,
