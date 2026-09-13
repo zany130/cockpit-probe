@@ -96,6 +96,9 @@ export const DEVICE_MALFORMED_ROW = "not-a-device-row";
 
 export const DEVICE_COMPLETELY_MALFORMED = "hello world\n;;;\nno-colons-here\n";
 
+export const DEVICE_FAILED_NO_DRIVER =
+    "pci:10de-ffff;03-00;failed;graphics card;;NVIDIA Corporation;Unbound GPU";
+
 export const DEVICE_FAILED_DISK =
     "ide:seagate-st1000-failed;01;failed;disk;;Seagate;ST1000DM003 1TB";
 
