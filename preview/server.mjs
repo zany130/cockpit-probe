@@ -25,6 +25,7 @@ const context = await esbuild.context({
     outdir: path.join(here, 'dist'),
     loader: { '.js': 'jsx' },
     nodePaths: [path.join(root, 'pkg/lib')],
+    external: ['*.woff', '*.woff2', '*.jpg', '*.svg', '../../assets*'],
     alias: {
         cockpit: path.join(here, 'mock-cockpit.ts'),
         'cockpit-dark-theme': path.join(here, 'empty.ts'),
