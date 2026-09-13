@@ -10,6 +10,14 @@ export const HW_PROBE_DUMPVERSION_ARGV = ["hw-probe", HW_PROBE_VERSION_ARGUMENT]
 
 export const CAPABILITY_TIMEOUT_MS = 8000;
 
+/*
+ * Upstream says extra operability checks (`-check`) take about a minute on
+ * typical desktops. v0.2 uses documented `-all` without `-check`, which is
+ * usually shorter. Ten minutes is a hang-protection ceiling for slower
+ * machines and large inventories, not a target duration.
+ */
+export const PROBE_TIMEOUT_MS = 10 * 60 * 1000;
+
 export const HW_PROBE_SPAWN_ENVIRON = ["LC_ALL=C", "LANG=C"] as const;
 
 export interface SpawnProcess {
@@ -35,6 +43,11 @@ export interface SpawnFailure {
     message: string;
 }
 
+export interface ControlledSpawn {
+    promise: Promise<string>;
+    close: (problem?: string) => void;
+}
+
 export function isSpawnFailure(value: unknown): value is SpawnFailure {
     if (typeof value !== "object" || value === null)
         return false;
@@ -42,12 +55,21 @@ export function isSpawnFailure(value: unknown): value is SpawnFailure {
     return "problem" in value;
 }
 
-export function timeoutFailure(): SpawnFailure {
+export function timeoutFailure(message = "hw-probe version query timed out"): SpawnFailure {
     return {
         problem: "timeout",
         exit_status: null,
         exit_signal: null,
-        message: "hw-probe version query timed out",
+        message,
+    };
+}
+
+export function cancelledFailure(): SpawnFailure {
+    return {
+        problem: "cancelled",
+        exit_status: null,
+        exit_signal: null,
+        message: "hardware probe was cancelled",
     };
 }
 
@@ -59,11 +81,19 @@ function asStringOutput(value: unknown): string {
     return String(value);
 }
 
-export async function spawnWithTimeout(
+function closeProcess(process: SpawnProcess, problem?: string) {
+    try {
+        process.close(problem);
+    } catch {
+        // Closing a finished process is harmless; ignore close races.
+    }
+}
+
+export function spawnControlled(
     spawn: SpawnFn,
     argv: readonly string[],
-    options: { timeoutMs: number; environ?: readonly string[] }
-): Promise<string> {
+    options: { timeoutMs: number; environ?: readonly string[]; timeoutMessage?: string }
+): ControlledSpawn {
     const args = argv.slice();
     const spawnOptions: SpawnOptions = { err: "ignore" };
     if (options.environ)
@@ -71,34 +101,70 @@ export async function spawnWithTimeout(
     const process = spawn(args, spawnOptions);
 
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    let timedOut = false;
+    let outcome: "timeout" | "cancelled" | null = null;
+    let settled = false;
+    let finishReject: (error: unknown) => void = () => undefined;
 
-    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    const timeoutMessage = options.timeoutMessage ?? "hw-probe version query timed out";
+
+    const promise = new Promise<string>((resolve, reject) => {
+        const finishResolve = (value: string) => {
+            if (settled)
+                return;
+            settled = true;
+            if (timeoutId !== undefined)
+                clearTimeout(timeoutId);
+            resolve(value);
+        };
+        finishReject = (error: unknown) => {
+            if (settled)
+                return;
+            settled = true;
+            if (timeoutId !== undefined)
+                clearTimeout(timeoutId);
+            reject(error);
+        };
+
         timeoutId = setTimeout(() => {
-            timedOut = true;
-            try {
-                process.close("timeout");
-            } catch {
-                // Closing a finished process is harmless; ignore close races.
-            }
-            reject(timeoutFailure());
+            outcome = "timeout";
+            closeProcess(process, "timeout");
+            finishReject(timeoutFailure(timeoutMessage));
         }, options.timeoutMs);
+
+        Promise.resolve(process)
+                .then(asStringOutput)
+                .then(finishResolve, error => {
+                    if (outcome === "cancelled")
+                        finishReject(cancelledFailure());
+                    else if (outcome === "timeout")
+                        finishReject(timeoutFailure(timeoutMessage));
+                    else
+                        finishReject(error);
+                });
     });
 
-    try {
-        const output = await Promise.race([
-            Promise.resolve(process).then(asStringOutput),
-            timeoutPromise,
-        ]);
-        return output;
-    } catch (error) {
-        if (timedOut)
-            throw timeoutFailure();
-        throw error;
-    } finally {
-        if (timeoutId !== undefined)
-            clearTimeout(timeoutId);
-    }
+    return {
+        promise,
+        close: (problem?: string) => {
+            if (problem === "cancelled") {
+                outcome = "cancelled";
+                closeProcess(process, "cancelled");
+                finishReject(cancelledFailure());
+                return;
+            }
+            if (problem === "timeout")
+                outcome = "timeout";
+            closeProcess(process, problem);
+        },
+    };
+}
+
+export async function spawnWithTimeout(
+    spawn: SpawnFn,
+    argv: readonly string[],
+    options: { timeoutMs: number; environ?: readonly string[] }
+): Promise<string> {
+    return spawnControlled(spawn, argv, options).promise;
 }
 
 export function cockpitSpawn(args: string[], options?: SpawnOptions): SpawnProcess {

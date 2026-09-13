@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
-import type { HwProbeError, HwProbeErrorKind } from './model';
+import type { HwProbeError, HwProbeErrorKind, ProbeExecutionError } from './model';
 import { isSpawnFailure, type SpawnFailure } from './spawn';
 
 /*
@@ -60,6 +60,20 @@ export function parseHwProbeVersion(stdout: string): VersionParseResult {
     return { ok: true, version };
 }
 
+export function parseLocalProbePath(stdout: string): string | undefined {
+    if (typeof stdout !== "string" || hasDisallowedCharacters(stdout))
+        return undefined;
+
+    const match = stdout.match(/^Local probe path:\s+(\/\S+)\s*$/m);
+    if (!match)
+        return undefined;
+
+    const path = match[1];
+    if (path.includes("..") || path.includes("\0"))
+        return undefined;
+    return path;
+}
+
 function technicalMessage(kind: HwProbeErrorKind, failure: SpawnFailure): string {
     switch (kind) {
     case "command-not-found":
@@ -98,4 +112,55 @@ export function normalizeSpawnFailure(error: unknown): HwProbeError {
         return { kind: "command-failed", message: technicalMessage("command-failed", error) };
 
     return { kind: "unknown", message: technicalMessage("unknown", error) };
+}
+
+export function normalizeProbeExecutionFailure(
+    error: unknown,
+    options: { backend: "native" | "flatpak" }
+): ProbeExecutionError {
+    if (!isSpawnFailure(error)) {
+        return {
+            kind: "unknown",
+            message: "hardware probe failed",
+        };
+    }
+
+    if (error.problem === "not-found") {
+        if (options.backend === "flatpak") {
+            return {
+                kind: "command-failed",
+                message: "hw-probe Flatpak is installed but failed to launch",
+            };
+        }
+        return {
+            kind: "command-not-found",
+            message: "hw-probe executable was not found",
+        };
+    }
+
+    if (error.problem === "access-denied") {
+        return {
+            kind: "permission-denied",
+            message: "execution of hw-probe was denied",
+        };
+    }
+
+    if (error.problem === "timeout") {
+        return {
+            kind: "timeout",
+            message: "hardware probe timed out",
+        };
+    }
+
+    if (error.problem == null && typeof error.exit_status === "number" && error.exit_status !== 0) {
+        return {
+            kind: "command-failed",
+            message: "hw-probe exited with status " + String(error.exit_status),
+        };
+    }
+
+    return {
+        kind: "unknown",
+        message: "hardware probe failed",
+    };
 }

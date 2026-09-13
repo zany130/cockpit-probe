@@ -19,15 +19,15 @@ function currentState(): MockState {
     return 'available';
 }
 
-function spawn(_args: string[]) {
+function spawn(args: string[]) {
     const state = currentState();
     let close = (_problem?: string) => {};
 
     const promise = new Promise<string>((resolve, reject) => {
         close = (problem?: string) => {
-            if (problem === 'timeout') {
+            if (problem === 'timeout' || problem === 'cancelled') {
                 reject({
-                    problem: 'timeout',
+                    problem,
                     exit_status: null,
                     exit_signal: null,
                     message: '',
@@ -38,8 +38,23 @@ function spawn(_args: string[]) {
         if (state === 'loading')
             return;
 
+        if (args.includes('-upload') || args.includes('--upload')) {
+            window.setTimeout(() => {
+                reject({ problem: null, exit_status: 99, exit_signal: null, message: 'upload is not allowed' });
+            }, 10);
+            return;
+        }
+
+        const delay = args.includes('-all') ? 600 : 250;
+
         window.setTimeout(() => {
             if (state === 'available') {
+                if (args.includes('-all')) {
+                    resolve(
+                        'Probe for hardware ... Ok\nReading logs ... Ok\nLocal probe path: /home/preview/HW_PROBE/LATEST/hw.info\n'
+                    );
+                    return;
+                }
                 resolve('1.6\n');
                 return;
             }
@@ -54,7 +69,7 @@ function spawn(_args: string[]) {
             if (state === 'timeout')
                 return;
             reject({ problem: null, exit_status: 1, exit_signal: null, message: '' });
-        }, 250);
+        }, delay);
     });
 
     return Object.assign(promise, { close: (problem?: string) => close(problem) });
@@ -62,6 +77,10 @@ function spawn(_args: string[]) {
 
 const cockpit = {
     gettext: (message: string) => message,
+    format: (template: string, ...args: unknown[]) => {
+        let index = 0;
+        return template.replace(/\$\d+/g, () => String(args[index++]));
+    },
     init: async () => undefined,
     info: {
         user: {

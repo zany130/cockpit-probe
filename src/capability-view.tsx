@@ -21,7 +21,8 @@ import { CubesIcon } from '@patternfly/react-icons';
 
 import cockpit from 'cockpit';
 
-import type { HwProbeCapability } from './model';
+import type { HwProbeCapability, ProbeExecutionState } from './model';
+import { ProbeExecutionView } from './probe-execution-view';
 
 const _ = cockpit.gettext;
 
@@ -32,9 +33,18 @@ export type CapabilityViewStatus =
 interface CapabilityViewProps {
     status: CapabilityViewStatus;
     onRefresh: () => void;
+    execution?: ProbeExecutionState | undefined;
+    onRunProbe?: (() => void) | undefined;
+    onCancelProbe?: (() => void) | undefined;
 }
 
-export const CapabilityView = ({ status, onRefresh }: CapabilityViewProps) => {
+export const CapabilityView = ({
+    status,
+    onRefresh,
+    execution,
+    onRunProbe,
+    onCancelProbe,
+}: CapabilityViewProps) => {
     const loading = status.phase === "loading";
 
     return (
@@ -48,7 +58,7 @@ export const CapabilityView = ({ status, onRefresh }: CapabilityViewProps) => {
                     <Button
                             variant="secondary"
                             onClick={onRefresh}
-                            isDisabled={loading}
+                            isDisabled={loading || execution?.status === "running"}
                             aria-label={_("Refresh hardware probe detection")}
                     >
                         {_("Refresh")}
@@ -56,7 +66,15 @@ export const CapabilityView = ({ status, onRefresh }: CapabilityViewProps) => {
                 </FlexItem>
             </Flex>
             {loading && <LoadingStatus />}
-            {status.phase === "ready" && <ReadyStatus capability={status.capability} onRefresh={onRefresh} />}
+            {status.phase === "ready" && (
+                <ReadyStatus
+                        capability={status.capability}
+                        onRefresh={onRefresh}
+                        execution={execution}
+                        onRunProbe={onRunProbe}
+                        onCancelProbe={onCancelProbe}
+                />
+            )}
         </div>
     );
 };
@@ -72,13 +90,26 @@ const LoadingStatus = () => (
 const ReadyStatus = ({
     capability,
     onRefresh,
+    execution,
+    onRunProbe,
+    onCancelProbe,
 }: {
     capability: HwProbeCapability;
     onRefresh: () => void;
+    execution?: ProbeExecutionState | undefined;
+    onRunProbe?: (() => void) | undefined;
+    onCancelProbe?: (() => void) | undefined;
 }) => {
     switch (capability.state) {
     case "available":
-        return <AvailableStatus version={capability.version ?? null} />;
+        return (
+            <AvailableStatus
+                    version={capability.version ?? null}
+                    execution={execution ?? { status: "idle" }}
+                    onRunProbe={onRunProbe}
+                    onCancelProbe={onCancelProbe}
+            />
+        );
     case "unavailable":
         return <UnavailableStatus />;
     case "permission-denied":
@@ -113,23 +144,39 @@ function errorBody(capability: HwProbeCapability): string {
     return _("An unexpected error occurred while detecting hw-probe.");
 }
 
-const AvailableStatus = ({ version }: { version: string | null }) => (
-    <EmptyState titleText={_("hw-probe is available")} headingLevel="h2">
-        <EmptyStateBody>
-            <p>{_("Hardware probing is ready on this system.")}</p>
-            {version !== null && (
-                <DescriptionList isHorizontal className="hw-probe-version">
-                    <DescriptionListGroup>
-                        <DescriptionListTerm>{_("Version")}</DescriptionListTerm>
-                        <DescriptionListDescription>{version}</DescriptionListDescription>
-                    </DescriptionListGroup>
-                </DescriptionList>
-            )}
-            <p>
-                {_("Local hardware probing will be available in the next implementation milestone.")}
-            </p>
-        </EmptyStateBody>
-    </EmptyState>
+const AvailableStatus = ({
+    version,
+    execution,
+    onRunProbe,
+    onCancelProbe,
+}: {
+    version: string | null;
+    execution: ProbeExecutionState;
+    onRunProbe?: (() => void) | undefined;
+    onCancelProbe?: (() => void) | undefined;
+}) => (
+    <div className="hw-probe-available">
+        <EmptyState titleText={_("hw-probe is available")} headingLevel="h2">
+            <EmptyStateBody>
+                <p>{_("Hardware probing is ready on this system.")}</p>
+                {version !== null && (
+                    <DescriptionList isHorizontal className="hw-probe-version">
+                        <DescriptionListGroup>
+                            <DescriptionListTerm>{_("Version")}</DescriptionListTerm>
+                            <DescriptionListDescription>{version}</DescriptionListDescription>
+                        </DescriptionListGroup>
+                    </DescriptionList>
+                )}
+            </EmptyStateBody>
+        </EmptyState>
+        {onRunProbe && onCancelProbe && (
+            <ProbeExecutionView
+                    execution={execution}
+                    onRun={onRunProbe}
+                    onCancel={onCancelProbe}
+            />
+        )}
+    </div>
 );
 
 const UnavailableStatus = () => (

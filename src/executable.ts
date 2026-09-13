@@ -75,11 +75,45 @@ export function userLocalInvocation(home: string): NativeHwProbeInvocation | nul
     };
 }
 
-export function dumpversionArgv(invocation: HwProbeInvocation): string[] {
-    if (invocation.kind === "native")
-        return [invocation.executable, HW_PROBE_VERSION_ARGUMENT];
+export const HW_PROBE_LOCAL_PROBE_ARGUMENTS = ["-all"] as const;
 
-    return [invocation.executable, "run", invocation.appId, HW_PROBE_VERSION_ARGUMENT];
+const UPLOAD_FLAGS = new Set([
+    "-upload",
+    "--upload",
+    "-confirm-upload-of-hashed-ids",
+    "--confirm-upload-of-hashed-ids",
+]);
+
+export function isUploadArgument(arg: string): boolean {
+    if (UPLOAD_FLAGS.has(arg))
+        return true;
+    return arg.startsWith("-upload=") || arg.startsWith("--upload=");
+}
+
+export function buildHwProbeArgv(
+    invocation: HwProbeInvocation,
+    hwProbeArgs: readonly string[]
+): string[] {
+    if (invocation.kind === "native")
+        return [invocation.executable, ...hwProbeArgs];
+
+    return [invocation.executable, "run", invocation.appId, ...hwProbeArgs];
+}
+
+export function dumpversionArgv(invocation: HwProbeInvocation): string[] {
+    return buildHwProbeArgv(invocation, [HW_PROBE_VERSION_ARGUMENT]);
+}
+
+export function buildLocalProbeArgv(invocation: HwProbeInvocation): string[] {
+    for (const arg of HW_PROBE_LOCAL_PROBE_ARGUMENTS) {
+        if (isUploadArgument(arg))
+            throw new Error("local probe arguments must not request upload");
+    }
+
+    const argv = buildHwProbeArgv(invocation, HW_PROBE_LOCAL_PROBE_ARGUMENTS);
+    if (argv.some(isUploadArgument))
+        throw new Error("local probe argv must not request upload");
+    return argv;
 }
 
 export async function cockpitUserHome(): Promise<string> {

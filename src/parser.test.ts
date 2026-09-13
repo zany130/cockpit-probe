@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { parseHwProbeVersion, normalizeSpawnFailure } from './parser';
+import { parseHwProbeVersion, normalizeSpawnFailure, parseLocalProbePath, normalizeProbeExecutionFailure } from './parser';
 import type { SpawnFailure } from './spawn';
 
 describe('parseHwProbeVersion', () => {
@@ -64,6 +64,23 @@ describe('parseHwProbeVersion', () => {
     });
 });
 
+describe('parseLocalProbePath', () => {
+    it('reads an absolute local probe path from stdout', () => {
+        expect(parseLocalProbePath(
+            'Probe for hardware ... Ok\nReading logs ... Ok\nLocal probe path: /root/HW_PROBE/LATEST/hw.info\n'
+        )).toBe('/root/HW_PROBE/LATEST/hw.info');
+    });
+
+    it('ignores stdout that does not print a local probe path', () => {
+        expect(parseLocalProbePath('Probe for hardware ... Ok\n')).toBeUndefined();
+    });
+
+    it('rejects a relative or traversing path', () => {
+        expect(parseLocalProbePath('Local probe path: ../HW_PROBE\n')).toBeUndefined();
+        expect(parseLocalProbePath('Local probe path: /tmp/../etc/passwd\n')).toBeUndefined();
+    });
+});
+
 describe('normalizeSpawnFailure', () => {
     function failure(partial: Partial<SpawnFailure>): SpawnFailure {
         return {
@@ -116,6 +133,46 @@ describe('normalizeSpawnFailure', () => {
         expect(normalizeSpawnFailure(new Error('boom'))).toEqual({
             kind: 'unknown',
             message: 'hw-probe version query failed',
+        });
+    });
+});
+
+describe('normalizeProbeExecutionFailure', () => {
+    function failure(partial: Partial<SpawnFailure>): SpawnFailure {
+        return {
+            problem: null,
+            exit_status: null,
+            exit_signal: null,
+            message: '',
+            ...partial,
+        };
+    }
+
+    it('maps native not-found to command-not-found', () => {
+        expect(normalizeProbeExecutionFailure(failure({ problem: 'not-found' }), { backend: 'native' })).toEqual({
+            kind: 'command-not-found',
+            message: 'hw-probe executable was not found',
+        });
+    });
+
+    it('maps Flatpak not-found to a launch failure, not missing', () => {
+        expect(normalizeProbeExecutionFailure(failure({ problem: 'not-found' }), { backend: 'flatpak' })).toEqual({
+            kind: 'command-failed',
+            message: 'hw-probe Flatpak is installed but failed to launch',
+        });
+    });
+
+    it('maps access-denied to permission-denied', () => {
+        expect(normalizeProbeExecutionFailure(failure({ problem: 'access-denied' }), { backend: 'native' })).toEqual({
+            kind: 'permission-denied',
+            message: 'execution of hw-probe was denied',
+        });
+    });
+
+    it('maps timeout to a probe timeout', () => {
+        expect(normalizeProbeExecutionFailure(failure({ problem: 'timeout' }), { backend: 'native' })).toEqual({
+            kind: 'timeout',
+            message: 'hardware probe timed out',
         });
     });
 });

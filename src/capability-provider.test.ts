@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { detectHwProbeCapability } from './capability-provider';
+import { detectHwProbeCapability, resolveHwProbe } from './capability-provider';
 import {
     dumpversionArgv,
     FLATPAK_INFO_ARGV,
@@ -133,6 +133,18 @@ describe('detectHwProbeCapability', () => {
         expect(calls[0].spawnOptions).toEqual({
             err: 'ignore',
             environ: [...HW_PROBE_SPAWN_ENVIRON],
+        });
+    });
+
+    it('returns the resolved native invocation for later probe execution', async () => {
+        const { spawn } = fakeSpawn({ stdout: '1.6.6' });
+        await expect(resolveHwProbe(spawn)).resolves.toEqual({
+            capability: {
+                state: 'available',
+                version: '1.6.6',
+                source: 'native-path',
+            },
+            invocation: PATH_DUMPVERSION_INVOCATION,
         });
     });
 

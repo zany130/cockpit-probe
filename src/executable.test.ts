@@ -6,7 +6,10 @@ import {
     FLATPAK_INFO_ARGV,
     FLATPAK_INVOCATION,
     HW_PROBE_FLATPAK_APP_ID,
+    HW_PROBE_LOCAL_PROBE_ARGUMENTS,
     PATH_DUMPVERSION_INVOCATION,
+    buildLocalProbeArgv,
+    isUploadArgument,
     userLocalHwProbePath,
     userLocalInvocation,
 } from './executable';
@@ -89,6 +92,50 @@ describe('dumpversionArgv', () => {
             '--show-ref',
             HW_PROBE_FLATPAK_APP_ID,
         ]);
+    });
+});
+
+describe('buildLocalProbeArgv', () => {
+    it('uses documented -all for a native PATH invocation', () => {
+        expect(buildLocalProbeArgv(PATH_DUMPVERSION_INVOCATION)).toEqual(['hw-probe', '-all']);
+    });
+
+    it('uses the user-local executable with -all', () => {
+        expect(buildLocalProbeArgv({
+            kind: 'native',
+            executable: '/home/testuser/.local/bin/hw-probe',
+            source: 'user-local',
+        })).toEqual(['/home/testuser/.local/bin/hw-probe', '-all']);
+    });
+
+    it('uses flatpak run for the official app, not a filesystem path', () => {
+        expect(buildLocalProbeArgv(FLATPAK_INVOCATION)).toEqual([
+            'flatpak',
+            'run',
+            HW_PROBE_FLATPAK_APP_ID,
+            '-all',
+        ]);
+    });
+
+    it('never includes an upload flag for any supported invocation', () => {
+        const invocations = [
+            PATH_DUMPVERSION_INVOCATION,
+            {
+                kind: 'native' as const,
+                executable: '/home/testuser/.local/bin/hw-probe',
+                source: 'user-local' as const,
+            },
+            FLATPAK_INVOCATION,
+        ];
+        expect([...HW_PROBE_LOCAL_PROBE_ARGUMENTS]).toEqual(['-all']);
+        expect(HW_PROBE_LOCAL_PROBE_ARGUMENTS.some(isUploadArgument)).toBe(false);
+        for (const invocation of invocations) {
+            const argv = buildLocalProbeArgv(invocation);
+            expect(argv.some(isUploadArgument)).toBe(false);
+            expect(argv).not.toContain('-upload');
+            expect(argv).not.toContain('--upload');
+            expect(argv.join('\0')).not.toMatch(/(^|\0)-upload(\0|$)/);
+        }
     });
 });
 

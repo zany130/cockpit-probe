@@ -33,3 +33,32 @@ export interface HwProbeCapability {
     source?: HwProbeSource;
     error?: HwProbeError;
 }
+
+export type ProbeExecutionErrorKind =
+    | "command-not-found"
+    | "permission-denied"
+    | "timeout"
+    | "command-failed"
+    | "unknown";
+
+export interface ProbeExecutionError {
+    kind: ProbeExecutionErrorKind;
+    message: string;
+}
+
+export type ProbeExecutionState =
+    | { status: "idle" }
+    | { status: "running"; startedAt: number }
+    | {
+        status: "succeeded";
+        startedAt: number;
+        completedAt: number;
+        artifactPath?: string;
+    }
+    | { status: "cancelled"; startedAt: number; completedAt: number }
+    | {
+        status: "failed";
+        startedAt: number;
+        completedAt: number;
+        error: ProbeExecutionError;
+    };

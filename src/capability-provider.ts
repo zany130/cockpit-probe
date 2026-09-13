@@ -26,7 +26,12 @@ export type UserHomeLookup = () => Promise<string>;
 
 type ProbeAttempt =
     | { status: "missing" }
-    | { status: "done"; capability: HwProbeCapability };
+    | { status: "done"; capability: HwProbeCapability; invocation: HwProbeInvocation | null };
+
+export interface ResolvedHwProbe {
+    capability: HwProbeCapability;
+    invocation: HwProbeInvocation | null;
+}
 
 function fromNormalizedError(error: HwProbeError): HwProbeCapability {
     if (error.kind === "command-not-found")
@@ -82,12 +87,12 @@ async function tryNativeDumpversion(
     invocation: NativeHwProbeInvocation
 ): Promise<ProbeAttempt> {
     try {
-        return { status: "done", capability: await queryDumpversion(spawn, invocation) };
+        return { status: "done", capability: await queryDumpversion(spawn, invocation), invocation };
     } catch (error) {
         const normalized = normalizeSpawnFailure(error);
         if (normalized.kind === "command-not-found")
             return { status: "missing" };
-        return { status: "done", capability: fromNormalizedError(normalized) };
+        return { status: "done", capability: fromNormalizedError(normalized), invocation };
     }
 }
 
@@ -101,11 +106,15 @@ async function tryFlatpakDumpversion(spawn: SpawnFn): Promise<ProbeAttempt> {
         const normalized = normalizeSpawnFailure(error);
         if (normalized.kind === "command-not-found" || normalized.kind === "command-failed")
             return { status: "missing" };
-        return { status: "done", capability: fromNormalizedError(normalized) };
+        return { status: "done", capability: fromNormalizedError(normalized), invocation: null };
     }
 
     try {
-        return { status: "done", capability: await queryDumpversion(spawn, FLATPAK_INVOCATION) };
+        return {
+            status: "done",
+            capability: await queryDumpversion(spawn, FLATPAK_INVOCATION),
+            invocation: FLATPAK_INVOCATION,
+        };
     } catch (error) {
         const normalized = normalizeSpawnFailure(error);
         if (normalized.kind === "command-not-found") {
@@ -118,22 +127,23 @@ async function tryFlatpakDumpversion(spawn: SpawnFn): Promise<ProbeAttempt> {
                         message: "hw-probe Flatpak is installed but failed to launch",
                     },
                 },
+                invocation: null,
             };
         }
-        return { status: "done", capability: fromNormalizedError(normalized) };
+        return { status: "done", capability: fromNormalizedError(normalized), invocation: null };
     }
 }
 
-export async function detectHwProbeCapability(
+export async function resolveHwProbe(
     spawn: SpawnFn = cockpitSpawn,
     getUserHome: UserHomeLookup = cockpitUserHome
-): Promise<HwProbeCapability> {
+): Promise<ResolvedHwProbe> {
     // Discovery order: native PATH, then ~/.local/bin, then official Flatpak.
     // Prefer native when both native and Flatpak installs exist. Do not fall
     // back after permission-denied, timeout, or command-failed.
     const pathAttempt = await tryNativeDumpversion(spawn, PATH_DUMPVERSION_INVOCATION);
     if (pathAttempt.status === "done")
-        return pathAttempt.capability;
+        return toResolved(pathAttempt);
 
     let homeFailed = false;
     try {
@@ -143,7 +153,7 @@ export async function detectHwProbeCapability(
         } else {
             const localAttempt = await tryNativeDumpversion(spawn, invocation);
             if (localAttempt.status === "done")
-                return localAttempt.capability;
+                return toResolved(localAttempt);
         }
     } catch {
         homeFailed = true;
@@ -151,10 +161,24 @@ export async function detectHwProbeCapability(
 
     const flatpakAttempt = await tryFlatpakDumpversion(spawn);
     if (flatpakAttempt.status === "done")
-        return flatpakAttempt.capability;
+        return toResolved(flatpakAttempt);
 
     if (homeFailed)
-        return homeLookupError();
+        return { capability: homeLookupError(), invocation: null };
 
-    return unavailableCapability();
+    return { capability: unavailableCapability(), invocation: null };
+}
+
+function toResolved(attempt: Extract<ProbeAttempt, { status: "done" }>): ResolvedHwProbe {
+    if (attempt.capability.state === "available")
+        return { capability: attempt.capability, invocation: attempt.invocation };
+    return { capability: attempt.capability, invocation: null };
+}
+
+export async function detectHwProbeCapability(
+    spawn: SpawnFn = cockpitSpawn,
+    getUserHome: UserHomeLookup = cockpitUserHome
+): Promise<HwProbeCapability> {
+    const resolved = await resolveHwProbe(spawn, getUserHome);
+    return resolved.capability;
 }

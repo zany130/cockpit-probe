@@ -187,6 +187,50 @@ Verified against current `linuxhw/hw-probe` `flatpak/hw-probe.sh` and `hw-probe.
 - Do not modify Flatpak permissions in v0.1. Do not install the Flatpak from this plugin.
 - v0.1 only detects capability/version. Do not assume the Flatpak has the same host hardware access as a native install. When v0.2 implements probing, independently verify sandbox permissions and access to `/sys`, `/proc`, PCI/USB enumeration, storage information, kernel logs, SMART/drive-health behavior, and privilege behavior. If Flatpak produces less complete data, surface that honestly.
 
+### 4.2 v0.2 upstream verification (2026-09-13)
+
+Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master`, current `-help`, a direct unprivileged run of that script, `flatpak-info(1)` / the official Flatpak manifest, and current Cockpit spawn docs.
+
+**Local probe command**
+
+- Current `-help` documents `-all` as “Probe for hardware.” It does **not** document `-probe`.
+- Getopt still accepts `probe!`, but it is listed under `# Obsolete`. `-probe` alone enables logs at **minimal** level. `-all` enables probe + logs at the **default** log level.
+- README and help examples use `hw-probe -all -upload` for the public upload path. Omitting `-upload` is the local-only form.
+- Direct observation (unprivileged `perl hw-probe.pl -all` and `-probe`, 2026-09-13): both exit 1 with stderr `ERROR: you should run as root ('sudo -E hw-probe ...' or with 'su')` and produce no stdout. No files were written. No upload occurred.
+- Therefore v0.2 invokes **`-all` only**, through the v0.1 resolved invocation. Do not use obsolete `-probe`. Do not add `-check`, `-save`, or `-upload`.
+- `-save DIR` packages a probe for a later `-src` upload. v0.2 does not relocate artifacts.
+
+**Upload / network**
+
+- `uploadData()` and curl POST run only inside `if($Opt{"Upload"})`. v0.2 never passes `-upload` / `--upload` / `-confirm-upload-of-hashed-ids`.
+- Linux dependency checks warn on missing `dmidecode`/`smartctl`/`lspci`/etc.; `curl` is required on some BSD paths, not as a Linux probe dependency.
+- Flatpak manifest includes `--share=network`. That does not mean this plugin initiates a request. A local `-all` run should not call `uploadData()`. Real-host packet capture is still needed to confirm no unexpected network from helper tools.
+
+**Artifacts**
+
+- Default `PROBE_DIR` is `/root/HW_PROBE` (help: “Probes info is saved in the $PROBE_DIR directory”). `LATEST_DIR` is `$PROBE_DIR/LATEST`. Observed success stdout includes `Local probe path: $DATA_DIR` (typically `/root/HW_PROBE/LATEST/hw.info` when run as root).
+- Snap uses `$SNAP_USER_COMMON/HW_PROBE`. Flatpak uses `$XDG_DATA_HOME/HW_PROBE` (commonly `~/.var/app/org.linux_hardware.hw-probe/data/HW_PROBE`).
+- A new probe `rmtree`s existing `$DATA_DIR` then writes `LATEST`. v0.2 does not delete or relocate probes itself. Cancellation via SIGTERM may leave a partial `LATEST` tree; do not auto-clean.
+
+**Completion**
+
+- Stdout progress lines such as `Probe for hardware ... Ok` are not a percentage and are not a reliable machine API. v0.2 treats Cockpit spawn completion with exit 0 as success.
+- `exitStatus(0)` is the normal successful end of `scenario()`. Non-zero is failure. Missing tools on Linux are often warnings rather than hard failures, except `hwinfo` when that log is enabled.
+
+**Privilege and Flatpak**
+
+- Native (non-Snap/non-Flatpak) probing as a non-root user **hard-fails** (`exitStatus(1)`). Snap/Flatpak only warn “run as root for better results” and continue.
+- v0.2 does not use `sudo`, `pkexec`, or `cockpit.spawn(..., { superuser })`. An unprivileged native run is expected to fail with a normalized command-failed error until v0.6.
+- Official Flatpak `finish-args` include `--device=all`, `--filesystem=host:ro`, `--filesystem=/sys:ro`, `--filesystem=/var/log:ro`, and `--share=network`. SMART and some logs still need root. Do not add `flatpak override`. If Flatpak probing is less complete, say so; do not silently equate it with native root.
+
+**Cockpit cancellation**
+
+- `process.close([problem])` closes stdin/stdout. If `problem` is set, Cockpit terminates the child with a signal. v0.2 uses `close("cancelled")` for Cancel and `close("timeout")` for the probe timer. Do not use `pkill`/`killall`.
+
+**Timeout**
+
+- Upstream documents about one minute for extra `-check` tests on typical desktops. v0.2 does not pass `-check`. Probe timeout is **10 minutes** (`PROBE_TIMEOUT_MS`), separate from the 8s capability timeout.
+
 ---
 
 # 5. Design Principles
@@ -732,13 +776,15 @@ Research exact recommended command/options first.
 
 Implement:
 
-- Run probe action
+- Run probe action using the v0.1 resolved invocation
+- argv: `buildHwProbeArgv(invocation, ["-all"])` (never `-upload`)
 - running state
 - completion state
-- timeout appropriate for hardware scan
-- safe cancellation if Cockpit process semantics support it
+- 10-minute probe timeout
+- Cancel via `process.close("cancelled")` on only this spawn
 - no upload
 - no automatic privilege escalation
+- no Flatpak permission overrides
 
 The command must not include `-upload`.
 
@@ -746,16 +792,21 @@ Do not assume a Flatpak install has identical host hardware access to a native i
 
 Tests:
 
-- successful run
-- slow run
+- successful native / user-local / Flatpak argv
 - failure
 - permission denied
 - timeout
-- cancellation if implemented
+- cancellation
+- duplicate run suppressed
+- executable disappeared
+- Flatpak launch failure
+- no-upload argv regression
 
 Real-host gate:
 
 Run a real probe successfully from Cockpit without uploading anything.
+
+Status (2026-09-13): implementation and unit tests landed. The Cockpit/Bazzite real-host gate is **not** marked complete in this environment (no Cockpit session and no native `hw-probe` package). Direct unprivileged CLI observation of current upstream `hw-probe.pl -all` failed as designed with the root requirement. Do not start v0.3 until a real-host Cockpit probe succeeds or that failure is accepted and documented on the target host.
 
 ---
 

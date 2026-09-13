@@ -6,24 +6,29 @@ A Cockpit plugin that provides a native web UI around [`hw-probe`](https://githu
 
 ## Current status
 
-**v0.1 — Capability Detection and Plugin Shell**
+**v0.2 — Local Probe Execution**
 
 This version provides:
 
 - a Cockpit plugin with one **Hardware Probe** navigation item
-- detection of whether the `hw-probe` executable is available
+- detection of whether `hw-probe` is available from PATH, `~/.local/bin`, or the official Flatpak
 - installed version detection via `hw-probe -dumpversion`
+- a manual **Run Hardware Probe** action that runs a local probe
+- running, success, failure, timeout, and cancelled states
+- targeted Cancel of only the process this page started
 
 This version does **not**:
 
-- run a local hardware probe
-- parse hardware inventory
+- parse hardware inventory or findings
 - upload anything
 - contact linux-hardware.org
 - install packages
 - escalate privileges
+- change Flatpak sandbox permissions
 
-Nothing is uploaded.
+The probe runs as the authenticated Cockpit user. Native `hw-probe` currently refuses to run without root and may fail until a later privilege review. Privileged-only hardware data can be incomplete. Upload is planned as a later explicit milestone.
+
+Nothing is uploaded. Running a local hardware probe does not upload data. Uploading to linux-hardware.org is a separate explicit action (not in this version).
 
 ## Planned workflow
 
@@ -33,7 +38,7 @@ The intended product workflow is:
 local probe → inspect summary → optional explicit upload
 ```
 
-That workflow is not implemented yet. v0.1 only answers whether `hw-probe` is installed and usable.
+That workflow is not fully implemented yet. v0.2 can run a local probe. Inventory parsing and optional upload come later.
 
 ## Package name
 
@@ -113,9 +118,9 @@ npm test
 NODE_ENV=production npm run build
 ```
 
-`npm test` runs Vitest unit tests for the parser, provider, spawn timeout, and UI states.
+`npm test` runs Vitest unit tests for the parser, providers, spawn timeout, probe execution, and UI states.
 
-`make check` is the optional Cockpit VM integration test from the Starter Kit. It is not required for v0.1 unit validation.
+`make check` is the optional Cockpit VM integration test from the Starter Kit. It is not required for v0.2 unit validation.
 
 ## Real-host verification (Bazzite / Fedora)
 
@@ -138,9 +143,19 @@ NODE_ENV=production npm run build
 
    They should match after trimming whitespace. A user-local binary should be detected even when Cockpit's process PATH does not include `~/.local/bin`. An official Flatpak install should be detected after PATH and user-local lookups fail. If both a native install and the Flatpak are present, the native version is the one shown.
 
-4. Click **Refresh**. Only version detection should run again. No probe files should appear, and no network upload should occur.
+4. Click **Run Hardware Probe**. The page should show a running state, then success or a normalized error. Compare with the same local command in a terminal:
 
-5. Optional missing-tool check: temporarily hide `hw-probe` from `PATH` for the Cockpit session, or test on a host without the package. The page should say that `hw-probe` is not installed or cannot be found.
+   ```bash
+   hw-probe -all
+   ~/.local/bin/hw-probe -all
+   flatpak run org.linux_hardware.hw-probe -all
+   ```
+
+   Use the invocation that matches the installation Cockpit detected. The command must not include `-upload`. Native unprivileged runs currently exit with `you should run as root`; that is upstream behavior, not an upload. A successful root or Flatpak run writes `LATEST` under the upstream probe directory and prints `Local probe path: ...`.
+
+5. Click **Refresh** only after the probe is idle. Refresh re-runs version detection, not a probe.
+
+6. Optional missing-tool check: temporarily hide `hw-probe` from `PATH` for the Cockpit session, or test on a host without the package. The page should say that `hw-probe` is not installed or cannot be found.
 
 On Fedora:
 

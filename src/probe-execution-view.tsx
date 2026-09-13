@@ -1,0 +1,216 @@
+/*
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ */
+
+import React, { useEffect, useState } from 'react';
+
+import {
+    Alert,
+    Button,
+    EmptyState,
+    EmptyStateActions,
+    EmptyStateBody,
+    EmptyStateFooter,
+    Spinner,
+} from '@patternfly/react-core';
+
+import cockpit from 'cockpit';
+
+import type { ProbeExecutionError, ProbeExecutionState } from './model';
+
+const _ = cockpit.gettext;
+
+interface ProbeExecutionViewProps {
+    execution: ProbeExecutionState;
+    onRun: () => void;
+    onCancel: () => void;
+}
+
+export const ProbeExecutionView = ({ execution, onRun, onCancel }: ProbeExecutionViewProps) => {
+    switch (execution.status) {
+    case "running":
+        return <RunningProbe execution={execution} onCancel={onCancel} />;
+    case "succeeded":
+        return <SucceededProbe execution={execution} onRun={onRun} />;
+    case "cancelled":
+        return <CancelledProbe execution={execution} onRun={onRun} />;
+    case "failed":
+        return <FailedProbe execution={execution} onRun={onRun} />;
+    case "idle":
+    default:
+        return <IdleProbe onRun={onRun} />;
+    }
+};
+
+const IdleProbe = ({ onRun }: { onRun: () => void }) => (
+    <EmptyState titleText={_("Run a local hardware probe")} headingLevel="h2">
+        <EmptyStateBody>
+            <p>{_("Run a local hardware probe on this system.")}</p>
+            <p>{_("No hardware information will be uploaded during this step.")}</p>
+            <p>
+                {_("The probe runs as the signed-in Cockpit user, without extra privileges. Native hw-probe currently requires root, so an unprivileged run may fail. Privileged-only hardware data can be incomplete.")}
+            </p>
+        </EmptyStateBody>
+        <EmptyStateFooter>
+            <EmptyStateActions>
+                <Button
+                        variant="primary"
+                        onClick={onRun}
+                        aria-label={_("Run hardware probe")}
+                >
+                    {_("Run Hardware Probe")}
+                </Button>
+            </EmptyStateActions>
+        </EmptyStateFooter>
+    </EmptyState>
+);
+
+const RunningProbe = ({
+    execution,
+    onCancel,
+}: {
+    execution: Extract<ProbeExecutionState, { status: "running" }>;
+    onCancel: () => void;
+}) => {
+    const elapsed = useElapsedLabel(execution.startedAt);
+    return (
+        <EmptyState titleText={_("Hardware probe is running…")} headingLevel="h2" icon={Spinner}>
+            <EmptyStateBody>
+                <p>{_("Collecting a local hardware probe. This does not upload anything.")}</p>
+                <p>{cockpit.format(_("Elapsed: $0"), elapsed)}</p>
+            </EmptyStateBody>
+            <EmptyStateFooter>
+                <EmptyStateActions>
+                    <Button
+                            variant="secondary"
+                            onClick={onCancel}
+                            aria-label={_("Cancel hardware probe")}
+                    >
+                        {_("Cancel")}
+                    </Button>
+                </EmptyStateActions>
+            </EmptyStateFooter>
+        </EmptyState>
+    );
+};
+
+const SucceededProbe = ({
+    execution,
+    onRun,
+}: {
+    execution: Extract<ProbeExecutionState, { status: "succeeded" }>;
+    onRun: () => void;
+}) => (
+    <Alert
+            variant="success"
+            isInline
+            title={_("Local hardware probe completed successfully.")}
+    >
+        <p>{cockpit.format(_("Duration: $0"), formatDuration(execution.completedAt - execution.startedAt))}</p>
+        <p>{_("Hardware inventory and findings are not shown in this milestone.")}</p>
+        <Button
+                variant="secondary"
+                onClick={onRun}
+                aria-label={_("Run hardware probe")}
+        >
+            {_("Run Hardware Probe")}
+        </Button>
+    </Alert>
+);
+
+const CancelledProbe = ({
+    execution,
+    onRun,
+}: {
+    execution: Extract<ProbeExecutionState, { status: "cancelled" }>;
+    onRun: () => void;
+}) => (
+    <Alert
+            variant="warning"
+            isInline
+            title={_("Hardware probe was cancelled")}
+            actionLinks={
+                <Button
+                        variant="link"
+                        isInline
+                        onClick={onRun}
+                        aria-label={_("Run hardware probe")}
+                >
+                    {_("Run Hardware Probe")}
+                </Button>
+            }
+    >
+        <p>{cockpit.format(_("Stopped after $0."), formatDuration(execution.completedAt - execution.startedAt))}</p>
+        <p>{_("No upload was performed.")}</p>
+    </Alert>
+);
+
+const FailedProbe = ({
+    execution,
+    onRun,
+}: {
+    execution: Extract<ProbeExecutionState, { status: "failed" }>;
+    onRun: () => void;
+}) => (
+    <Alert
+            variant={execution.error.kind === "timeout" ? "warning" : "danger"}
+            isInline
+            title={failureTitle(execution.error)}
+            actionLinks={
+                <Button
+                        variant="link"
+                        isInline
+                        onClick={onRun}
+                        aria-label={_("Run hardware probe")}
+                >
+                    {_("Run Hardware Probe")}
+                </Button>
+            }
+    >
+        {failureBody(execution.error)}
+    </Alert>
+);
+
+function failureTitle(error: ProbeExecutionError): string {
+    if (error.kind === "timeout")
+        return _("The hardware probe timed out");
+    if (error.kind === "permission-denied")
+        return _("The hardware probe could not be executed with the current permissions");
+    if (error.kind === "command-not-found")
+        return _("hw-probe could not be started");
+    if (error.kind === "command-failed")
+        return _("The hardware probe command failed");
+    return _("The hardware probe failed");
+}
+
+function failureBody(error: ProbeExecutionError): string {
+    if (error.kind === "timeout")
+        return _("Detection stopped before the probe finished. You can run it again. This page did not upload anything.");
+    if (error.kind === "permission-denied")
+        return _("This page did not request extra privileges and did not upload anything.");
+    if (error.kind === "command-not-found")
+        return _("hw-probe was available earlier, but it could not be started now. Refresh detection or reinstall the tool. This page did not upload anything.");
+    if (error.kind === "command-failed")
+        return _("hw-probe exited before completing a local probe. Native installs currently require root; the official Flatpak may run unprivileged with less complete data. This page did not upload anything.");
+    return _("An unexpected error occurred while running the hardware probe. This page did not upload anything.");
+}
+
+function useElapsedLabel(startedAt: number): string {
+    const [now, setNow] = useState(() => Date.now());
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setNow(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, [startedAt]);
+
+    return formatDuration(now - startedAt);
+}
+
+export function formatDuration(ms: number): string {
+    const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    if (minutes === 0)
+        return cockpit.format(_("$0 seconds"), String(seconds));
+    return cockpit.format(_("$0 minutes $1 seconds"), String(minutes), String(seconds));
+}
