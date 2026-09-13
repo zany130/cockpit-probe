@@ -9,8 +9,8 @@ License:        LGPL-2.1-or-later
 %define rebuild_bundle 1
 %endif
 
-Source0: https://github.com/cockpit-project/starter-kit/releases/download/%{version}/%{name}-%{version}.tar.xz
-Source1: https://github.com/cockpit-project/starter-kit/releases/download/%{version}/%{name}-node-%{version}.tar.xz
+Source0: %{name}-%{version}.tar.xz
+Source1: %{name}-node-%{version}.tar.xz
 
 BuildArch:      noarch
 %if ! 0%{?suse_version}
@@ -40,8 +40,10 @@ Recommends:     hw-probe
 %{NPM_PROVIDES}
 
 %description
-Cockpit plugin that detects whether hw-probe is installed and usable.
-v0.1 does not run a hardware probe and does not upload anything.
+Cockpit plugin around hw-probe. It can run a local hardware probe, show a
+hardware summary and conservative findings, and optionally upload a probe
+to linux-hardware.org after explicit confirmation. Running a local hardware
+probe does not upload data.
 
 %prep
 %autosetup -n %{name}
@@ -73,9 +75,11 @@ appstream-util validate-relax --nonet %{buildroot}/%{_datadir}/metainfo/*
 # FMF (see plans/all.fmf) during package gating
 
 %files
-%doc README.md
-%license LICENSE dist/index.js.LEGAL.txt
+%doc README.md CHANGELOG.md CONTRIBUTING.md
+%license LICENSE LICENSE-AUDIT.md dist/index.js.LEGAL.txt
 %{_datadir}/cockpit/*
 %{_datadir}/metainfo/*
 
 %changelog
+* Sun Sep 13 2026 Hardware Probe contributors <cockpit-devel@lists.fedorahosted.org> - 1.0.0-1
+- Initial v1.0 release

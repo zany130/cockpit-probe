@@ -18,5 +18,6 @@ class TestApplication(testlib.MachineCase):
         self.login_and_go("/hardware-probe")
         b.wait_text("h1", "Hardware Probe")
         b.wait_visible("button[aria-label='Refresh hardware probe detection']")
-        # v0.1 never exposes a working probe action.
-        b.wait_not_present("button:contains('Run probe')")
+        # Page load must not start an upload.
+        b.wait_not_present("[role='dialog']")
+        b.wait_not_present("button[aria-label='Confirm upload probe']")

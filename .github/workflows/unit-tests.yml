@@ -1,0 +1,44 @@
+name: unit-tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gettext make
+
+      - name: Install JavaScript dependencies
+        run: npm install
+
+      - name: Checkout Cockpit shared files and build
+        run: make
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        run: npm run eslint
+
+      - name: Stylelint
+        run: npm run stylelint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Production build
+        run: NODE_ENV=production npm run build

@@ -19,7 +19,6 @@ coverage/
 /bots
 /cockpit-*.spec
 /cockpit-*.tar.xz
-/cockpit-navigator.spec
 /dist/
 /metafile.json
 /package-lock.json

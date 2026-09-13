@@ -3,14 +3,23 @@
   <id>org.cockpit_project.hardware_probe</id>
   <metadata_license>CC0-1.0</metadata_license>
   <name>Hardware Probe</name>
-  <summary>Detect whether hw-probe is installed in Cockpit</summary>
+  <summary>Inspect local hardware with hw-probe in Cockpit</summary>
   <description>
     <p>
-      A Cockpit plugin that detects whether hw-probe is installed and reports
-      its version. Local hardware probing and upload are not included in v0.1.
+      A Cockpit plugin around hw-probe. It can run a local hardware probe,
+      show a hardware summary and conservative findings, and optionally
+      upload a probe to linux-hardware.org after explicit confirmation.
+      Running a local hardware probe does not upload data.
     </p>
   </description>
   <extends>org.cockpit_project.cockpit</extends>
   <launchable type="cockpit-manifest">hardware-probe</launchable>
   <url type="homepage">https://linux-hardware.org/</url>
+  <releases>
+    <release version="1.0.0" date="2026-09-13">
+      <description>
+        <p>First stable release.</p>
+      </description>
+    </release>
+  </releases>
 </component>

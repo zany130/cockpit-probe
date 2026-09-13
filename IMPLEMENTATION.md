@@ -1200,7 +1200,7 @@ Implemented:
 - offline/long-running copy
 - tests for the above
 
-Do not start v1.0 from this milestone.
+Do not start post-1.0 features from this milestone. v1.0 is the release of this plugin.
 
 Real-host gate (operator): confirm Refresh during a long native probe stays disabled, a large USB inventory remains scrollable on a phone-width Cockpit pane, and Escape dismisses upload confirmation. This environment cannot mark that passed.
 
@@ -1208,7 +1208,9 @@ Real-host gate (operator): confirm Refresh during a long native probe stays disa
 
 ## v1.0 — Release
 
-Requirements:
+Status (2026-09-13): **1.0.0**. Product behavior is the completed v0.1–v0.7 plugin, including the post-upload empty local-probe state. Packaging, CI, and release documentation land in this milestone. This environment still cannot mark the Bazzite real-host gate passed.
+
+Requirements (all addressed in-tree):
 
 - local probe works
 - no automatic upload
@@ -1218,16 +1220,29 @@ Requirements:
 - privacy explanation is accurate
 - no command injection
 - no shell interpolation
-- privilege behavior audited
+- privilege behavior audited (v0.6: no extra privileged operations)
 - responsive UI
-- tests
-- CI
-- Fedora/Bazzite RPM
-- clean install/uninstall
+- tests (Vitest; optional Cockpit VM `make check`)
+- CI (`.github/workflows/unit-tests.yml`)
+- Fedora/Bazzite RPM (`Recommends: hw-probe`; no probe or network during install)
+- clean install/uninstall (`rpm -i` / `rpm -e`, plus `make devel-install` / `devel-uninstall`)
 - release-quality README
 - CHANGELOG
 - CONTRIBUTING
-- license audit
+- license audit (`LICENSE-AUDIT.md`)
+
+Implemented for 1.0.0:
+
+- README / CHANGELOG / CONTRIBUTING / LICENSE-AUDIT
+- `package.json` version `1.0.0`, LGPL-2.1-or-later
+- AppStream summary/description for the full plugin
+- RPM spec description and local tarball sources
+- GitHub Actions unit tests (tsc, eslint, stylelint, vitest, production build)
+- Cockpit VM smoke test no longer assumes the v0.1 “no Run Probe” UI
+
+Real-host gate (operator): see CONTRIBUTING.md. This environment cannot mark that passed.
+
+Do not implement post-1.0 ideas from §14 without an explicit roadmap change.
 
 ---
 
@@ -1320,20 +1335,20 @@ At minimum:
 
 First supported production package:
 
-- Fedora/Bazzite RPM
+- Fedora/Bazzite RPM (`cockpit-hardware-probe`)
 
-The RPM should:
+The RPM:
 
-- install the Cockpit package
-- depend on Cockpit appropriately
-- determine whether `hw-probe` should be `Requires` or `Recommends`
-- avoid bundling hw-probe unless licensing/packaging explicitly justifies it
-- avoid auto-running a probe during installation
-- avoid network access during installation
-- avoid enabling background monitoring
-- uninstall cleanly
+- installs the Cockpit package under `/usr/share/cockpit/hardware-probe`
+- `Requires: cockpit-bridge`
+- `Recommends: hw-probe` (not `Requires`, so the page can show the unavailable state)
+- does not bundle hw-probe
+- does not auto-run a probe during installation
+- does not access the network during installation
+- does not enable background monitoring
+- uninstalls with `rpm -e cockpit-hardware-probe`
 
-Do not claim distro support that has not been tested.
+Do not claim distro compose support that has not been tested. Arch PKGBUILD remains untested leftover packaging.
 
 ---
 
@@ -1357,6 +1372,8 @@ The README must clearly state:
 > Running a local hardware probe does not upload data. Uploading to linux-hardware.org is a separate explicit action.
 
 Do not claim complete anonymity; reflect upstream behavior accurately.
+
+v1.0 also ships CHANGELOG.md, CONTRIBUTING.md, and LICENSE-AUDIT.md.
 
 ---
 
