@@ -125,6 +125,8 @@ export function buildLocalProbeArgv(invocation: HwProbeInvocation): string[] {
         throw new Error("local probe argv must not request upload");
     if (argv.includes("-probe"))
         throw new Error("local probe argv must not use the obsolete undocumented probe flag");
+    if (argv.includes("-check") || argv.includes("-check-extended"))
+        throw new Error("local probe argv must not run hw-probe hardware checks");
     return argv;
 }
 

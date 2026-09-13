@@ -68,3 +68,20 @@
 .hw-probe-inventory {
     margin-block-start: var(--pf-t--global--spacer--lg);
 }
+
+.hw-probe-findings {
+    margin-block-start: var(--pf-t--global--spacer--lg);
+}
+
+.hw-probe-findings-counts {
+    margin-block: var(--pf-t--global--spacer--md);
+}
+
+.hw-probe-finding-list {
+    margin-block: var(--pf-t--global--spacer--md);
+}
+
+.hw-probe-finding-list h3 {
+    font-size: var(--pf-t--global--font--size--heading--xs);
+    margin-block-end: var(--pf-t--global--spacer--sm);
+}

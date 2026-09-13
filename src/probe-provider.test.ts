@@ -341,6 +341,8 @@ describe('createProbeController', () => {
             expect(call.args.some(isUploadArgument)).toBe(false);
             expect(call.args).toContain('-all');
             expect(call.args).not.toContain('-probe');
+            expect(call.args).not.toContain('-check');
+            expect(call.args).not.toContain('-check-extended');
             expect(call.args.join(' ')).not.toContain('-upload');
             expect(call.args[0]).not.toBe('sh');
             expect(call.args[0]).not.toBe('bash');

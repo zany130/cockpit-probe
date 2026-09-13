@@ -220,6 +220,7 @@ describe('CapabilityView', () => {
             />
         );
         expect(screen.getByText('Hardware Summary')).toBeInTheDocument();
+        expect(screen.getByText('Hardware Findings')).toBeInTheDocument();
         expect(screen.getByText(/completed successfully/)).toBeInTheDocument();
         expect(screen.queryByText(/hardware probe command failed/i)).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /upload/i })).not.toBeInTheDocument();

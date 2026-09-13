@@ -6,43 +6,39 @@ A Cockpit plugin that provides a native web UI around [`hw-probe`](https://githu
 
 ## Current status
 
-**v0.3 — Local Probe Parsing and Hardware Summary**
+**v0.4 — Hardware Findings**
 
-This version provides:
+This version provides everything in v0.3, plus a **Hardware Findings** section derived from the same local `devices` statuses:
 
-- a Cockpit plugin with one **Hardware Probe** navigation item
-- detection of whether `hw-probe` is available from PATH, `~/.local/bin`, or the official Flatpak
-- installed version detection via `hw-probe -dumpversion`
-- a manual **Run Hardware Probe** action that runs a local `hw-probe -all`
-- running, success, failure, timeout, cancelled, and administrative-access-required states
-- targeted Cancel of only the process this page started
-- a hardware summary parsed from the local probe’s raw `host` and `devices` files
-- overview cards for System, CPU, Memory, Graphics, Storage (physical disks), and Network
-- a categorized Devices list, with bridges/controllers and other low-level types under **Other devices**
-- privacy filtering that discards identifiers such as `hwaddr` before they reach the UI model
+- counts of hw-probe statuses (Works, Detected, and others when present)
+- devices hw-probe marked `failed` or `malfunc`, with the upstream meaning quoted conservatively
+- user-facing devices with status `detected` listed as unconfirmed operability, not as failures
+- low-level bridges/controllers with `detected` kept under a secondary expandable list
+- unknown future statuses shown as unrecognized, not as failures
+
+`detected` means hw-probe has not confirmed operability. It is **not** automatically a warning, a break, or poor health.
 
 This version does **not**:
 
 - upload anything or contact linux-hardware.org
-- run `hw-probe -check` or `-check-extended`
-- interpret `works` / `detected` as a health score or findings
-- install packages or drivers
+- run `hw-probe -check` or `-check-extended` (those mix live tests and benchmarks; see IMPLEMENTATION.md §4.4)
+- invent a hardware health score or percentage
+- install packages, drivers, or firmware
+- offer repair/remediation actions
 - use `sudo`, `su`, `pkexec`, or a shell
 - change Flatpak sandbox permissions
-- automatically run `hw-probe -all` on page load
+- automatically run `hw-probe -all` or `-check` on page load
 
 Version detection runs as the authenticated Cockpit user. Native `hw-probe` 1.6 requires root for the actual probe, so **Run Hardware Probe** uses Cockpit's documented privileged spawn (`superuser: "require"`) only after that button is pressed. Reading an existing native inventory uses Cockpit `cockpit.file` with `superuser: "require"` on two trusted paths:
 
 - `/root/HW_PROBE/LATEST/hw.info/host`
 - `/root/HW_PROBE/LATEST/hw.info/devices`
 
-Those files are an internal hw-probe format (not a documented stable public API). The plugin does not parse the truncated `hw-probe -show-devices` table. Canonical resolution of `/root/HW_PROBE` may be a distro-specific root-home alias such as `/var/roothome`; the plugin still uses `/root/HW_PROBE` and does not hardcode that alias.
+Those files are an internal hw-probe format (not a documented stable public API). Findings reuse the v0.3 parsed `HardwareDevice[]`; they do not reparse a second file format.
 
-Device statuses are shown as **Works** or **Detected** as hw-probe reported them. That is not a health score.
+Device statuses remain **Works**, **Detected**, **Failed**, **Malfunction**, and so on as hw-probe reported them. Absence of a problem status is not proof that the machine is healthy.
 
-If no local probe exists yet, the page shows **No local hardware probe is available yet** and **Run Hardware Probe**. Missing `LATEST` data is not treated as a crash. After a successful probe, the two files are reloaded. Probe command success and inventory parse success are independent.
-
-The official Flatpak is still started as the signed-in user. Inventory is read from the documented Flatpak data directory under the authenticated home (`~/.var/app/org.linux_hardware.hw-probe/data/HW_PROBE/...`) without extra privileges. If that location cannot be determined, the page reports that inventory is unavailable. Native and Flatpak installs are not claimed to be equivalent.
+The official Flatpak still uses the v0.3 unprivileged inventory path. Passive findings work on that same inventory. Active `-check` is not implemented, so Flatpak check/sandbox gaps are not papered over with `flatpak override`.
 
 Nothing is uploaded. Running a local hardware probe does not upload data. Uploading to linux-hardware.org is a separate explicit action (not in this version).
 
@@ -54,7 +50,7 @@ The intended product workflow is:
 local probe → inspect summary → optional explicit upload
 ```
 
-v0.3 covers local probe execution plus the hardware summary. Findings and optional upload come later.
+v0.4 covers local probe execution, the hardware summary, and conservative findings from probe statuses. Optional upload comes later.
 
 ## Package name
 
@@ -136,7 +132,7 @@ NODE_ENV=production npm run build
 
 `npm test` runs Vitest unit tests for parsers, providers, spawn timeout, probe execution, inventory, and UI states.
 
-`make check` is the optional Cockpit VM integration test from the Starter Kit. It is not required for v0.3 unit validation.
+`make check` is the optional Cockpit VM integration test from the Starter Kit. It is not required for v0.4 unit validation. The plugin does not run `hw-probe -check`.
 
 ## Real-host verification (Bazzite / Fedora)
 
@@ -174,8 +170,14 @@ This plugin was implemented and unit-tested in a Chromebook Linux container. It 
    - The host `hwaddr` value is **nowhere** in the UI
    - Low-level devices remain available under **Devices** / **Other devices**
    - There is no Upload action, no `-check`, and no health score
+   - **Hardware Findings** loads from the same local probe (not a second file format)
+   - Devices with status `works` are counted as Works, not as “healthy”
+   - Devices with status `detected` are **not** called broken, unhealthy, warning, or critical
+   - Low-level PCI bridges/controllers with `detected` stay under **Low-level devices without confirmed operability**, not as danger cards
+   - Unrecognized statuses, if any, are listed separately from reported problems
+   - Counts are integers (Works / Detected / …), never a percentage or “Hardware Health”
 
-5. Click **Run Hardware Probe**. Native probes request Cockpit administrative access and run `-all` without `-upload`. After success, the summary should refresh from the two files. Compare with a privileged terminal run only for validation:
+5. Click **Run Hardware Probe**. Native probes request Cockpit administrative access and run `-all` without `-upload`. After success, the summary should refresh from the two files, and Hardware Findings should refresh from that same inventory. Compare with a privileged terminal run only for validation:
 
    ```bash
    hw-probe -all
@@ -186,7 +188,11 @@ This plugin was implemented and unit-tested in a Chromebook Linux container. It 
 
    If Cockpit denies administrative access, the page reports that administrative access is required. That is not a generic `hw-probe` command failure. If the probe command succeeds but the inventory files cannot be parsed, that is shown as an inventory-read failure, not “Hardware probe failed.”
 
-6. Click **Refresh** only after the probe is idle. Refresh re-runs version detection and re-reads the existing inventory; it does not start `hw-probe -all` by itself.
+6. Click **Refresh** only after the probe is idle. Refresh re-runs version detection and re-reads the existing inventory; it does not start `hw-probe -all` or `-check` by itself.
+
+7. Confirm no network/upload request occurs while using the page (browser developer tools → Network, or `journalctl` / Cockpit logs). The plugin has no Upload control in this version.
+
+8. Do **not** run `hw-probe -check` or `-check-extended` from this plugin. Those commands are active tests plus benchmarks; v0.4 does not expose them. If you want to inspect what `-check` would do on this host, that is a manual upstream experiment, not plugin acceptance.
 
 On Fedora:
 

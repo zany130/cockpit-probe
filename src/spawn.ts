@@ -12,9 +12,9 @@ export const CAPABILITY_TIMEOUT_MS = 8000;
 
 /*
  * Upstream says extra operability checks (`-check`) take about a minute on
- * typical desktops. v0.2 uses documented `-all` without `-check`, which is
- * usually shorter. Ten minutes is a hang-protection ceiling for slower
- * machines and large inventories, not a target duration.
+ * typical desktops. Local probes use documented `-all` without `-check`.
+ * v0.4 does not execute `-check`. Ten minutes is a hang-protection ceiling
+ * for slower machines and large inventories, not a target duration.
  */
 export const PROBE_TIMEOUT_MS = 10 * 60 * 1000;
 

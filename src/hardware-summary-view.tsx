@@ -33,6 +33,8 @@ import type {
     InventoryError,
     InventoryState,
 } from './model';
+import { deviceLabel, formatDeviceStatus } from './device-display';
+import { HardwareFindingsView } from './hardware-findings-view';
 import { buildSystemTitle } from './inventory-normalizer';
 
 const _ = cockpit.gettext;
@@ -184,6 +186,7 @@ const ReadyInventory = ({ summary }: { summary: HardwareSummary }) => (
                 </OverviewCard>
             </GalleryItem>
         </Gallery>
+        <HardwareFindingsView summary={summary} />
         <DeviceInventory summary={summary} />
     </div>
 );
@@ -314,26 +317,7 @@ const Item = ({ term, value }: { term: string; value: string }) => (
     </DescriptionListGroup>
 );
 
-export function formatDeviceStatus(status: string): string {
-    if (status === "works")
-        return _("Works");
-    if (status === "detected")
-        return _("Detected");
-    if (status === "")
-        return _("Detected");
-    return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
-export function deviceLabel(device: HardwareDevice): string {
-    const vendor = device.vendor.trim();
-    const name = device.device.trim();
-    if (vendor && name) {
-        if (name.toLowerCase().includes(vendor.toLowerCase()))
-            return name;
-        return vendor + " " + name;
-    }
-    return name || vendor || device.type;
-}
+export { deviceLabel, formatDeviceStatus } from './device-display';
 
 export function categoryLabel(id: DeviceCategoryId): string {
     switch (id) {

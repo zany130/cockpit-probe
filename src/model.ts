@@ -160,3 +160,50 @@ export type InventoryState =
     | { status: "empty" }
     | { status: "ready"; summary: HardwareSummary }
     | { status: "failed"; error: InventoryError };
+
+export type FindingKind =
+    | "confirmed-working"
+    | "detected"
+    | "reported-problem"
+    | "unknown";
+
+export type FindingSource = "probe-status";
+
+export interface DeviceReference {
+    id: string;
+    bus: string;
+    type: string;
+    vendor: string;
+    device: string;
+    driver: string | null;
+}
+
+export interface HardwareFinding {
+    device: DeviceReference | null;
+    upstreamStatus: string;
+    kind: FindingKind;
+    summary: string;
+    detail?: string | undefined;
+    source: FindingSource;
+    prominence: "noteworthy" | "secondary";
+}
+
+export interface HardwareFindingsCounts {
+    works: number;
+    detected: number;
+    failed: number;
+    malfunc: number;
+    limited: number;
+    fixed: number;
+    other: number;
+    total: number;
+}
+
+export interface HardwareFindingsSummary {
+    counts: HardwareFindingsCounts;
+    problems: HardwareFinding[];
+    unconfirmed: HardwareFinding[];
+    unknown: HardwareFinding[];
+    secondaryUnconfirmed: HardwareFinding[];
+    source: FindingSource;
+}

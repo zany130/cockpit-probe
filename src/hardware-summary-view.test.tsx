@@ -49,6 +49,8 @@ describe('HardwareSummaryView', () => {
         expect(screen.getByText(/not a health score/)).toBeInTheDocument();
         expect(screen.queryByText(/pci:1002/)).not.toBeInTheDocument();
         expect(screen.queryByText(/1002-744c/)).not.toBeInTheDocument();
+        expect(screen.getByText('Hardware Findings')).toBeInTheDocument();
+        expect(screen.getByText(/No problems are reported in the available hw-probe data/)).toBeInTheDocument();
     });
 
     it('shows a loading state without running a probe', () => {
@@ -72,7 +74,7 @@ describe('HardwareSummaryView', () => {
         screen.getByRole('button', { name: 'Other devices' }).click();
         expect(screen.getByText('Storage controllers')).toBeInTheDocument();
         expect(screen.getByText(/SATA controller/)).toBeInTheDocument();
-        expect(screen.getByText(/flux capacitor|ACME Model Q/)).toBeInTheDocument();
+        expect(screen.getAllByText(/flux capacitor|ACME Model Q/).length).toBeGreaterThanOrEqual(1);
     });
 
     it('shows the empty state with Run Hardware Probe', () => {

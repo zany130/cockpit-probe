@@ -1,4 +1,4 @@
-import { VALID_DEVICES_FIXTURE, VALID_HOST_FIXTURE } from '../src/fixtures/inventory-fixtures';
+import { VALID_DEVICES_FIXTURE, VALID_HOST_FIXTURE, mixedFindingsDevices } from '../src/fixtures/inventory-fixtures';
 
 type MockState =
     | 'available'
@@ -8,7 +8,8 @@ type MockState =
     | 'error'
     | 'loading'
     | 'admin-denied'
-    | 'empty-inventory';
+    | 'empty-inventory'
+    | 'findings-problems';
 
 let probed = false;
 
@@ -22,7 +23,8 @@ function currentState(): MockState {
             value === 'error' ||
             value === 'loading' ||
             value === 'admin-denied' ||
-            value === 'empty-inventory')
+            value === 'empty-inventory' ||
+            value === 'findings-problems')
         return value;
     return 'available';
 }
@@ -56,7 +58,7 @@ function spawn(args: string[]) {
         const delay = args.includes('-all') ? 600 : 250;
 
         window.setTimeout(() => {
-            if (state === 'available' || state === 'admin-denied' || state === 'empty-inventory') {
+            if (state === 'available' || state === 'admin-denied' || state === 'empty-inventory' || state === 'findings-problems') {
                 if (args.includes('-all')) {
                     if (state === 'admin-denied') {
                         reject({ problem: 'access-denied', exit_status: null, exit_signal: null, message: '' });
@@ -102,7 +104,7 @@ function file(path: string, options?: { superuser?: string }) {
             if (path.endsWith('/host'))
                 return VALID_HOST_FIXTURE;
             if (path.endsWith('/devices'))
-                return VALID_DEVICES_FIXTURE;
+                return state === 'findings-problems' ? mixedFindingsDevices() : VALID_DEVICES_FIXTURE;
             return null;
         },
         close: () => undefined,

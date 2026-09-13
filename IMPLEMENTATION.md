@@ -296,7 +296,7 @@ Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master` (`writeHos
 
 **Statuses**
 
-- Preserve upstream `works` / `detected` (UI: Works / Detected). Do not map them to health scores, traffic lights, or findings. v0.4 owns `-check` / findings.
+- Preserve upstream `works` / `detected` (UI: Works / Detected). Do not map them to health scores or traffic lights. v0.4 derives a separate findings model from these statuses; it does not mutate `HardwareDevice`.
 
 **Privilege boundary (v0.3)**
 
@@ -304,6 +304,76 @@ Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master` (`writeHos
 2. Native read of the two trusted inventory files via `cockpit.file` with `superuser: "require"`.
 
 Capability/version detection remains unprivileged.
+
+### 4.4 v0.4 upstream verification (2026-09-13)
+
+Verified against current `linuxhw/hw-probe` `hw-probe.pl` on `master` (fetched 2026-09-13; `GetOptions`, help text, `writeDevs`, `setDriveStatus`, battery capacity, `checkHW`, `checkGraphics` / `checkGraphicsCardOutput`, `makeProbe`, option normalization) and the Operability table in the same repository’s README. linux-hardware.org documents the same status table via that README. This environment did **not** execute `-check` on Bazzite and did not guess from option names.
+
+**Device Status vocabulary**
+
+`writeDevs()` writes `$HW{$ID}{"Status"}` and, if it is empty, assigns `"detected"` (comment: “test result”). That is the complete field written into the v0.3 `devices` file.
+
+Statuses **assigned by current local probing** in `hw-probe.pl`:
+
+| Status | Where assigned | Upstream meaning (README Operability) |
+| --- | --- | --- |
+| `works` | `probeHW` and related paths: in-use NICs, graphics logs, CPU, SMART `PASSED` / `SMART Health Status: OK` in `setDriveStatus`, etc. | Driver is found and operates properly (passed static or dynamic tests) |
+| `detected` | default in `writeDevs()` when no status was set; some graphics paths via `setCardStatus(..., "detected")`; optical drives | Device is detected, driver is found, but not tested yet |
+| `failed` | missing driver on several classes; SMART `FAILED` / `FAIL` in `setDriveStatus`; graphics module-unload paths | Driver is not found **or** device is broken (upstream does not distinguish which) |
+| `malfunc` | battery capacity at or below `$MIN_BAT_CAPACITY` | Error operation of the device or driver |
+
+README also documents `limited` (“Works, but with limited functionality”) and `fixed` (“Works, fixed by user”; assigned during linux-hardware.org probe **review**, not by local `-all`). Those strings are **not** assigned in current `hw-probe.pl` local probing. If they appear (for example after a reviewed/exported probe), v0.4 classifies them as confirmed-working, not as problems.
+
+Unknown future statuses are preserved as `unknown` findings and are **not** treated as failure. Missing status is treated as `detected`, matching `writeDevs()`.
+
+`detected` is absence of confirmed operability, not a warning or a break. A PCI bridge with `detected` is not a malfunction report. Do not implement `works → healthy`, `detected → warning`, `else → failed`.
+
+**`-check` — answers to the research questions**
+
+Sources: help text (`-check` / `-check-extended`), Getopt `check!`, option block that sets `Probe`+`Logs`, `makeProbe()`, `checkHW()`, `getGears()`, README Operability / extra tests list. Line numbers below are from `hw-probe.pl` on `master` as fetched 2026-09-13.
+
+1. **What does `-check` do?** Help: “Check devices operability. Test performance of CPU, memory, graphics cards and drives.” README Operability: extra sanity tests (`glxgears`, `hdparm` read speed, `dd`/`md5sum` CPU, `memtester`), about one minute on typical desktops.
+2. **Evaluate existing probe vs actively test?** Actively tests. `makeProbe()` runs `probeHW()` / `writeLogs()`, then `checkHW()`, then `writeDevs()` / `writeHost()`. It is not a read of an already-collected probe.
+3. **Categories tested?** Graphics (`glxgears`), memory (`memtester`), drives (sequential read), CPU (`dd` throughput). Not a general per-device operability sweep.
+4. **Benchmarks?** Yes. Help explicitly says performance testing. CPU path is a throughput measurement; `-check-extended` adds `7z b`.
+5. **Disk reads/writes?** Sequential **reads** via `hdparm -t` (BSD: `diskinfo -c`). No write-test of user filesystems was found in `checkHW()`.
+6. **SMART operations?** Not in `checkHW()`. SMART collection and `setDriveStatus()` happen during `-all` logs (`smartctl`), not as a `-check` self-test.
+7. **Stress CPU/memory/GPU/storage?** Yes, for the duration of those tests: `glxgears` ~17s (`getGears`: `glxgears -info … & sleep 17 ; killall glxgears`), `memtester 8 1` (8 MiB, one loop), `hdparm -t` on each disk, `dd` 512 MiB from `/dev/zero` piped to `md5sum`.
+8. **Root?** Native non-Flatpak: `Probe` requires root (`exitStatus(1)`). `-check` sets `Probe`+`Logs`, so native `-check` requires root. Flatpak/Snap print a warning and continue rather than hard-exit.
+9. **Duration?** Upstream README: about one minute on average modern desktops. Not measured on Bazzite in this environment.
+10. **Alters `/root/HW_PROBE/LATEST`?** Yes. `writeDevs()` / `writeHost()` run after `checkHW()`, so LATEST is rewritten. Tests are written under `$DATA_DIR/tests/` (`glxgears`, `memtester`, `hdd_read`, `cpu_perf`).
+11. **Requires a preceding `-all`?** No. `-check` itself sets `Probe` and `Logs` (same flags `-all` sets).
+12. **Combined with `-all`?** Combining still runs one `makeProbe()`: collect, then `checkHW()`, then write. Semantics are “full probe plus the extra tests,” not two independent jobs.
+13. **Files/status fields?** Test logs under `tests/`. Device `Status` is still the `devices` field. `checkHW()`’s own comment is still `TODO: test operability, set status to "works", "malfunc" or "failed"`. Most tests only write logs. Graphics “frames in” can set GPU status to `works` via `checkGraphicsCardOutput`.
+14. **Exit codes?** Same process `exitStatus(0|1)` as other modes. No dedicated machine-readable check-result code was found.
+15. **`-check` vs `-check-extended`?** Both enable CheckGraphics/Memory/Hdd/Cpu. Extended additionally sets `Check7z` and runs `7z b`.
+16. **Machine-readable result?** No separate findings JSON. Consumers would re-read `devices` plus optional `tests/` logs. Test logs are not a stable public API.
+17. **Do `works`/`detected`/failed in `devices` depend on `-check`?** Mostly no. Those statuses are assigned during `probeHW()` / SMART / related log analysis. `-check` may promote some graphics cards to `works` if glxgears prints “frames in”. It does not systematically rewrite other statuses (see the TODO on `checkHW()`).
+18. **Useful findings without `-check`?** Yes. The existing `devices` Status field already carries `works` / `detected` / `failed` / `malfunc` from `-all`.
+
+**`-check-extended`**
+
+- Getopt: `check-extended!`. Help: “Perform extended check.”
+- Enables the same four `-check` tests plus `7z b` (p7zip benchmark) written to `tests/7z_b`.
+- Not exposed in v0.4. It is more performance-oriented, not a distinct operability model.
+
+**Decision: Option A — passive findings only**
+
+v0.4 does **not** execute `-check` or `-check-extended`, automatically or as a button.
+
+Rationale:
+
+- Passive `Status` fields already distinguish confirmed operability, untested detection, and explicit problem statuses.
+- `-check` mixes operability testing with performance benchmarks. v0.4 is findings, not benchmarking.
+- `checkHW()` does not systematically update Status (TODO in source), so running it would often produce test logs this plugin is not prepared to interpret.
+- It is active: GPU/memory load, sequential disk reads, rewrite of LATEST. Unsuitable to attach to page load, Refresh, or `-all`.
+- Duration and host impact were not measured on the real Bazzite machine; this environment must not fabricate that.
+
+No automatic or explicit check action. Do not silently substitute `-check-extended`.
+
+**Flatpak**
+
+Passive findings reuse the v0.3 inventory path (native privileged files or the documented Flatpak data dir). Official Flatpak docs ask for root mainly to check drive health (SMART during `-all`). This environment did not run Flatpak `-check`; sandboxing would likely reduce `glxgears` / `hdparm` / `memtester` usefulness. Because active check is not implemented, that gap is not papered over. No `flatpak override`.
 
 ---
 
@@ -669,21 +739,23 @@ v0.3 shows a concise **Hardware Summary** from the privacy-filtered model:
 - Graphics / Storage (`type=disk` only) / Network
 - Devices: overview categories, with bridges/controllers and other low-level types under **Other devices**
 
-Preserve upstream status wording (Works / Detected). Do not show issue counts, health scores, or findings (v0.4).
+Preserve upstream status wording (Works / Detected). v0.4 adds a **Hardware Findings** section with status counts and noteworthy upstream statuses. Do not show health scores.
 
 Do not display hundreds of raw log lines. Do not dump an ungrouped 90-row table on the overview.
 
 ## 8.5 Findings
 
-Highlight only meaningful upstream-reported problems.
+v0.4 shows a **Hardware Findings** section derived from the same `HardwareDevice[]` inventory:
 
-Examples:
+- numeric counts of upstream statuses (not percentages, not a health score)
+- reported problems only for `failed` / `malfunc`
+- user-facing `detected` devices as unconfirmed operability, not warnings
+- low-level bridges/controllers with `detected` under a secondary expandable list
+- unknown statuses listed without being classified as failure
 
-- failed/nonworking device status
-- missing driver where explicitly reported
-- unsupported device where explicitly reported
+Copy must not claim the machine is healthy because no problem status was assigned.
 
-Do not infer problems from harmless missing optional metadata.
+Active `-check` is not offered.
 
 ## 8.6 Upload
 
@@ -935,18 +1007,33 @@ Goal:
 
 Surface useful problems without building a fake diagnostics engine.
 
-Implement conservative findings for statuses explicitly reported by hw-probe.
+Status (2026-09-13): **passive findings only** (Option A). See §4.4.
 
-Possible categories, only where supported by upstream data:
+Implemented:
 
-- nonworking device
-- unsupported device
-- missing driver
-- unknown operability
+- typed `HardwareFinding` / `HardwareFindingsSummary` separate from `HardwareDevice`
+- flow: v0.3 `devices` parser → `HardwareDevice[]` → `deriveFindings()` → `HardwareFindingsSummary` → React
+- React does not parse raw command output or infer hardware health
+- correlation by stripped upstream device `id` (bus/ID), not display name; RAM modules with the same label stay distinct; CPU logical duplicates count once
+- if a future source cannot be correlated, `HardwareFinding.device` may be `null` (unassociated) rather than attaching to the wrong device
+- UI: Hardware Findings with numeric status counts, reported problems (`failed` / `malfunc`), unconfirmed user-facing `detected` devices, secondary low-level `detected` list, unrecognized statuses
+- `detected` is not a warning; unknown statuses are not failures
+- no `-check` / `-check-extended` execution
+- no health score, remediation, or upload
 
-Do not parse generic logs for speculative errors unless roadmap is explicitly revised.
+Error semantics remain distinct from v0.2/v0.3:
 
-Do not create a health score.
+- Probe execution failed
+- Probe data could not be read
+- Probe data could not be parsed
+- Findings could not be derived (only if the pure normalizer throws; it is total over a parsed inventory)
+- Administrative access required
+
+Active-check states (hardware check failed / cancelled / timed out) are **not** in the UI because `-check` is not implemented.
+
+Do not parse generic logs for speculative errors. Do not create a health score.
+
+Real-host gate (operator): see README checklist. This environment cannot mark it passed.
 
 ---
 

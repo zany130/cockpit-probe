@@ -154,6 +154,8 @@ describe('buildLocalProbeArgv', () => {
             expect(argv).not.toContain('-upload');
             expect(argv).not.toContain('--upload');
             expect(argv).not.toContain('-probe');
+            expect(argv).not.toContain('-check');
+            expect(argv).not.toContain('-check-extended');
             expect(argv.join('\0')).not.toMatch(/(^|\0)-upload(\0|$)/);
         }
     });

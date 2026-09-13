@@ -95,3 +95,43 @@ export const DEVICE_EXTRA_FIELDS = "pci:10ec-8125;02-00;works;network;r8169;Real
 export const DEVICE_MALFORMED_ROW = "not-a-device-row";
 
 export const DEVICE_COMPLETELY_MALFORMED = "hello world\n;;;\nno-colons-here\n";
+
+export const DEVICE_FAILED_NO_DRIVER =
+    "pci:10de-ffff;03-00;failed;graphics card;;NVIDIA Corporation;Unbound GPU";
+
+export const DEVICE_MALFUNC_BATTERY =
+    "bat:acme-cell;00;malfunc;battery;;ACME;Battery 10 Wh";
+
+export const DEVICE_LIMITED_NETWORK =
+    "pci:8086-24fd;02-80;limited;network;iwlwifi;Intel Corporation;Wireless 8265";
+
+export const DEVICE_FIXED_INPUT =
+    "usb:046d-c52b-fixed;03;fixed;human interface;usbhid;Logitech, Inc.;Unifying Receiver";
+
+export const DEVICE_UNKNOWN_STATUS =
+    "usb:ffff-0002;ff;glitchy;flux capacitor;;ACME;Model Q";
+
+export const DEVICE_DETECTED_BRIDGE =
+    "pci:1002-1478-detected;06-04;detected;bridge;pcieport;Advanced Micro Devices, Inc. [AMD/ATI];Navi 10 XL Upstream Port of PCI Express Switch";
+
+export const DEVICE_MISSING_STATUS =
+    "pci:1022-14d9-nostatus;08-06;;iommu;;Advanced Micro Devices, Inc. [AMD];IOMMU";
+
+export function mixedFindingsDevices(): string {
+    return [
+        ...repeatedCpuRows(12),
+        DEVICE_FAILED_NO_DRIVER,
+        DEVICE_MALFUNC_BATTERY,
+        DEVICE_LIMITED_NETWORK,
+        DEVICE_FIXED_INPUT,
+        DEVICE_UNKNOWN_STATUS,
+        DEVICE_DETECTED_BRIDGE,
+        "pci:1002-744c-1849-5315;03-00;works;graphics card;amdgpu;Advanced Micro Devices, Inc. [AMD/ATI];VGA compatible controller",
+        "mem:slot-0;05-00;works;memory;;Kingston;RAM Module 16GB DIMM 4800MT/s",
+        "mem:slot-1;05-00;works;memory;;Kingston;RAM Module 16GB DIMM 4800MT/s",
+        "pci:10ec-8125-1849-8125;02-00;detected;network;r8169;Realtek Semiconductor Co., Ltd.;RTL8125 2.5GbE Controller",
+        "ide:seagate-st4000vn006;01;works;disk;;Seagate;ST4000VN006 4TB",
+        DEVICE_EMPTY_DRIVER,
+        "",
+    ].join("\n");
+}
