@@ -4,6 +4,8 @@
 
 import React from 'react';
 
+import cockpit from 'cockpit';
+
 interface SectionErrorBoundaryProps {
     children: React.ReactNode;
     heading: string;
@@ -12,6 +14,8 @@ interface SectionErrorBoundaryProps {
 interface SectionErrorBoundaryState {
     failed: boolean;
 }
+
+const _ = cockpit.gettext;
 
 export class SectionErrorBoundary extends React.Component<
     SectionErrorBoundaryProps,
@@ -30,7 +34,7 @@ export class SectionErrorBoundary extends React.Component<
         if (this.state.failed) {
             return (
                 <p role="alert">
-                    {this.props.heading} could not be displayed.
+                    {cockpit.format(_("$0 could not be displayed."), this.props.heading)}
                 </p>
             );
         }

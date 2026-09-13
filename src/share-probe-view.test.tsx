@@ -69,6 +69,23 @@ describe('ShareProbeView', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
+    it('closes confirmation with Escape without uploading', () => {
+        const onRequestUpload = vi.fn();
+        render(
+            <ShareProbeView
+                    canUpload
+                    upload={idle}
+                    onRequestUpload={onRequestUpload}
+                    onCancelUpload={() => {}}
+            />
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Upload probe to linux-hardware.org' }));
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(onRequestUpload).not.toHaveBeenCalled();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
     it('confirms exactly once', () => {
         const onRequestUpload = vi.fn();
         render(
@@ -151,6 +168,11 @@ describe('ShareProbeView', () => {
         );
         expect(screen.queryByText(/published anonymously/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/completely anonymous/i)).not.toBeInTheDocument();
+        const link = screen.getByRole('link', { name: /View uploaded probe/ });
+        expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+        expect(link).toHaveAttribute('referrerpolicy', 'no-referrer');
+        expect(link).toHaveAttribute('target', '_blank');
+        expect(link).toHaveAttribute('href', 'https://linux-hardware.org/?probe=b394035f90');
     });
 
     it('does not invent a link when metadata is missing', () => {

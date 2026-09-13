@@ -3,13 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { PATH_DUMPVERSION_INVOCATION, FLATPAK_INVOCATION } from './executable';
 import { FAKE_HWADDR, VALID_DEVICES_FIXTURE, VALID_HOST_FIXTURE } from './fixtures/inventory-fixtures';
 import {
+    createInventoryLoadSession,
     loadHardwareInventory,
     nativeInventoryPaths,
     reconcileInventoryWithProbe,
     type InventoryFileReader,
 } from './inventory-provider';
 import { NATIVE_DEVICES_PATH, NATIVE_HOST_PATH } from './inventory-paths';
-import type { ProbeExecutionState } from './model';
+import type { InventoryState, ProbeExecutionState } from './model';
 import { summaryContainsSensitiveValue } from './inventory-privacy';
 
 interface InventoryFileReadProblem {
@@ -191,6 +192,20 @@ describe('loadHardwareInventory', () => {
         expect(summaryContainsSensitiveValue(reconciled.summary, FAKE_HWADDR)).toBe(false);
     });
 
+    it('maps too-large file reads to a read failure without treating them as a probe failure', async () => {
+        const { readFile } = fakeReader({
+            [NATIVE_HOST_PATH]: { error: { problem: 'too-large' } },
+            [NATIVE_DEVICES_PATH]: { content: VALID_DEVICES_FIXTURE },
+        });
+        const result = await loadHardwareInventory(PATH_DUMPVERSION_INVOCATION, { readFile });
+        expect(result).toMatchObject({
+            status: 'failed',
+            error: { kind: 'read-failed' },
+        });
+        expect(result.status === 'failed' && result.error.message).toMatch(/larger than this page will read/);
+        expect(JSON.stringify(result)).not.toMatch(/hardware probe failed/i);
+    });
+
     it('keeps probe success distinct from a later parse failure', async () => {
         const { readFile } = fakeReader({
             [NATIVE_HOST_PATH]: { content: '????' },
@@ -247,5 +262,75 @@ describe('reconcileInventoryWithProbe', () => {
 
     it('keeps empty inventory when no probe has completed', () => {
         expect(reconcileInventoryWithProbe({ status: 'empty' }, { status: 'idle' })).toEqual({ status: 'empty' });
+    });
+});
+
+describe('createInventoryLoadSession', () => {
+    it('ignores a stale inventory read', async () => {
+        const resolvers: Array<(value: InventoryState) => void> = [];
+        const load = () => new Promise<InventoryState>(resolve => {
+            resolvers.push(resolve);
+        });
+        const session = createInventoryLoadSession({ load });
+        const states: InventoryState[] = [];
+        const setInventory = (state: InventoryState) => {
+            states.push(state);
+        };
+
+        session.request(PATH_DUMPVERSION_INVOCATION, { status: 'idle' }, setInventory);
+        session.request(PATH_DUMPVERSION_INVOCATION, { status: 'idle' }, setInventory);
+        expect(states.filter(state => state.status === 'loading')).toHaveLength(2);
+
+        resolvers[0]({
+            status: 'failed',
+            error: { kind: 'unknown', message: 'stale' },
+        });
+        await Promise.resolve();
+        expect(states.some(state => state.status === 'failed')).toBe(false);
+
+        resolvers[1]({ status: 'empty' });
+        await Promise.resolve();
+        expect(states[states.length - 1]).toEqual({ status: 'empty' });
+    });
+
+    it('does not flash loading over a previous result when keepPrevious is set', async () => {
+        const resolvers: Array<(value: InventoryState) => void> = [];
+        const load = () => new Promise<InventoryState>(resolve => {
+            resolvers.push(resolve);
+        });
+        const session = createInventoryLoadSession({ load });
+        const states: InventoryState[] = [];
+        const setInventory = (state: InventoryState) => {
+            states.push(state);
+        };
+
+        session.request(PATH_DUMPVERSION_INVOCATION, { status: 'idle' }, setInventory);
+        resolvers[0]({ status: 'empty' });
+        await Promise.resolve();
+        expect(states[states.length - 1]).toEqual({ status: 'empty' });
+
+        session.request(PATH_DUMPVERSION_INVOCATION, { status: 'idle' }, setInventory, { keepPrevious: true });
+        expect(states[states.length - 1]).toEqual({ status: 'empty' });
+        expect(states.filter(state => state.status === 'loading')).toHaveLength(1);
+
+        resolvers[1]({ status: 'empty' });
+        await Promise.resolve();
+        expect(states[states.length - 1]).toEqual({ status: 'empty' });
+    });
+
+    it('drops in-flight results after invalidate', async () => {
+        const resolvers: Array<(value: InventoryState) => void> = [];
+        const load = () => new Promise<InventoryState>(resolve => {
+            resolvers.push(resolve);
+        });
+        const session = createInventoryLoadSession({ load });
+        const states: InventoryState[] = [];
+        session.request(PATH_DUMPVERSION_INVOCATION, { status: 'idle' }, state => {
+            states.push(state);
+        });
+        session.invalidate();
+        resolvers[0]({ status: 'empty' });
+        await Promise.resolve();
+        expect(states).toEqual([{ status: 'loading' }]);
     });
 });

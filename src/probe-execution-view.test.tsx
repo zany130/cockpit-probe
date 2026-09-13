@@ -3,7 +3,7 @@ import React from 'react';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { ProbeExecutionView } from './probe-execution-view';
+import { formatDuration, ProbeExecutionView } from './probe-execution-view';
 
 afterEach(() => {
     cleanup();
@@ -21,6 +21,7 @@ describe('ProbeExecutionView', () => {
         );
         expect(screen.getByText(/Run a local hardware probe on this system/)).toBeInTheDocument();
         expect(screen.getByText(/Native hardware probes require Cockpit administrative access because hw-probe itself requires root/)).toBeInTheDocument();
+        expect(screen.getByText(/This local probe does not need internet access/)).toBeInTheDocument();
         expect(screen.getByText(/No probe data is uploaded by this action/)).toBeInTheDocument();
         expect(screen.queryByText(/sudo/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/unprivileged/i)).not.toBeInTheDocument();
@@ -60,6 +61,8 @@ describe('ProbeExecutionView', () => {
         expect(screen.getByRole('heading', { name: /Hardware probe is running/ })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Run hardware probe' })).not.toBeInTheDocument();
         expect(screen.getByText(/Elapsed:/)).toBeInTheDocument();
+        expect(screen.getByText(/does not need internet access/)).toBeInTheDocument();
+        expect(screen.getByText(/stops waiting after ten minutes/)).toBeInTheDocument();
         screen.getByRole('button', { name: 'Cancel hardware probe' }).click();
         expect(onCancel).toHaveBeenCalledTimes(1);
         expect(onRun).not.toHaveBeenCalled();
@@ -155,5 +158,12 @@ describe('ProbeExecutionView', () => {
         );
         expect(screen.getByText(/was cancelled/)).toBeInTheDocument();
         expect(screen.getByText(/No upload was performed/)).toBeInTheDocument();
+    });
+
+    it('formats long-running durations without a zero-second suffix', () => {
+        expect(formatDuration(0)).toBe('0 seconds');
+        expect(formatDuration(4000)).toBe('4 seconds');
+        expect(formatDuration(10 * 60 * 1000)).toBe('10 minutes');
+        expect(formatDuration(61000)).toBe('1 minutes 1 seconds');
     });
 });

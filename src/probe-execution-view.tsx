@@ -77,12 +77,12 @@ const IdleProbe = ({
             {backend === "flatpak"
                 ? (
                     <p>
-                        {_("This Flatpak probe runs as the signed-in Cockpit user. Sandboxing can reduce hardware visibility. hw-probe collects SMART only as administrator, so drive health may be missing. No probe data is uploaded by this action.")}
+                        {_("This Flatpak probe runs as the signed-in Cockpit user. Sandboxing can reduce hardware visibility. hw-probe collects SMART only as administrator, so drive health may be missing. This local probe does not need internet access. No probe data is uploaded by this action.")}
                     </p>
                 )
                 : (
                     <p>
-                        {_("Native hardware probes require Cockpit administrative access because hw-probe itself requires root. Version detection does not. No probe data is uploaded by this action.")}
+                        {_("Native hardware probes require Cockpit administrative access because hw-probe itself requires root. Version detection does not. This local probe does not need internet access. No probe data is uploaded by this action.")}
                     </p>
                 )}
         </EmptyStateBody>
@@ -111,8 +111,11 @@ const RunningProbe = ({
     return (
         <EmptyState titleText={_("Hardware probe is running…")} headingLevel="h2" icon={Spinner}>
             <EmptyStateBody>
-                <p>{_("Collecting a local hardware probe. This does not upload anything.")}</p>
+                <div role="status">
+                    <p>{_("Collecting a local hardware probe. This does not upload anything and does not need internet access.")}</p>
+                </div>
                 <p>{cockpit.format(_("Elapsed: $0"), elapsed)}</p>
+                <p>{_("You can cancel. If it does not finish, this page stops waiting after ten minutes.")}</p>
             </EmptyStateBody>
             <EmptyStateFooter>
                 <EmptyStateActions>
@@ -257,5 +260,7 @@ export function formatDuration(ms: number): string {
     const seconds = totalSeconds % 60;
     if (minutes === 0)
         return cockpit.format(_("$0 seconds"), String(seconds));
+    if (seconds === 0)
+        return cockpit.format(_("$0 minutes"), String(minutes));
     return cockpit.format(_("$0 minutes $1 seconds"), String(minutes), String(seconds));
 }

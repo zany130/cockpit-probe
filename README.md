@@ -6,17 +6,11 @@ A Cockpit plugin that provides a native web UI around [`hw-probe`](https://githu
 
 ## Current status
 
-**v0.6 — Privilege and extended data review**
+**v0.7 — UX / compatibility / hardening**
 
-This version keeps v0.5 upload behavior and does **not** add another privileged command.
+This version keeps the v0.6 privilege decision and does **not** add product features.
 
-Native `hw-probe -all` already requires root. Cockpit administrative access is used only for that native probe, reading its privileged inventory, and native upload. Version detection stays unprivileged.
-
-Drive **Works** / **Failed** can include SMART PASSED/FAILED from a privileged `-all`. This page still does not show SMART attributes, temperatures, or a health score. It does not read `logs/smartctl`, run `-check`, or use `sudo`.
-
-Flatpak probes stay unprivileged. SMART and some hardware details may be missing; the UI says so. This plugin does not change Flatpak sandbox permissions.
-
-Optional **Share Probe** from v0.5 is unchanged: nothing is uploaded unless you confirm `hw-probe -upload`. hw-probe applies its own privacy filtering; this is not complete anonymity.
+Refresh no longer blanks the page. Leaving the Cockpit page cancels a running probe or upload. Large device lists show the first 80 rows in each group. Local probe copy says internet is not required; upload still needs the network. Escape dismisses the in-flow upload confirmation.
 
 This version still does **not**:
 
@@ -37,7 +31,7 @@ The intended product workflow is:
 local probe → inspect summary → optional explicit upload
 ```
 
-v0.6 covers local probe execution, the hardware summary, conservative findings, optional upload, and an honest privilege/drive-status review.
+v0.7 covers that workflow plus refresh, long-running probe, large-inventory, mobile, and accessibility hardening. Privilege and upload behavior are unchanged from v0.6.
 
 ## Package name
 
@@ -119,7 +113,7 @@ NODE_ENV=production npm run build
 
 `npm test` runs Vitest unit tests for parsers, providers, spawn timeout, probe execution, inventory, findings, upload, drive status, and UI states.
 
-`make check` is the optional Cockpit VM integration test from the Starter Kit. It is not required for v0.6 unit validation. The plugin does not run `hw-probe -check`.
+`make check` is the optional Cockpit VM integration test from the Starter Kit. It is not required for v0.7 unit validation. The plugin does not run `hw-probe -check`.
 
 ### Browser preview (mocked Cockpit)
 

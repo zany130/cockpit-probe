@@ -102,6 +102,7 @@ describe('CapabilityView', () => {
         );
         expect(screen.getByRole('heading', { name: /not installed or cannot be found/ })).toBeInTheDocument();
         expect(screen.getByText(/Install hw-probe on this host/)).toBeInTheDocument();
+        expect(screen.getByText(/does not install packages/)).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /install/i })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Run hardware probe' })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /upload/i })).not.toBeInTheDocument();
@@ -173,6 +174,24 @@ describe('CapabilityView', () => {
         expect(screen.getByRole('button', { name: 'Refresh hardware probe detection' })).toBeDisabled();
         expect(screen.queryByRole('button', { name: 'Run hardware probe' })).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Cancel hardware probe' })).toBeInTheDocument();
+    });
+
+    it('disables refresh while detecting or reading inventory without hiding a ready summary', () => {
+        const result = normalizeInventory(VALID_HOST_FIXTURE, VALID_DEVICES_FIXTURE);
+        if (!result.ok)
+            throw new Error('fixture must normalize');
+        render(
+            <CapabilityView
+                    status={{ phase: 'ready', capability: { state: 'available', version: '1.6' } }}
+                    detecting
+                    onRefresh={() => {}}
+                    execution={{ status: 'idle' }}
+                    inventory={{ status: 'ready', summary: result.summary }}
+            />
+        );
+        expect(screen.getByText('Hardware Summary')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Refresh hardware probe detection' })).toBeDisabled();
+        expect(document.querySelector('.hw-probe-status')?.getAttribute('aria-busy')).toBe('true');
     });
 
     it('does not render raw HTML from a version string', () => {

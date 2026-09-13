@@ -1165,25 +1165,41 @@ Real-host gate (operator): compare a native privileged probe’s disk Status wit
 
 ## v0.7 — UX / Compatibility / Hardening
 
-Audit:
+Audit (no major new features):
 
-- long-running command behavior
-- large hardware inventories
-- virtualization
-- systems without hw-probe
-- systems with older/newer hw-probe
-- parser schema changes
-- offline systems
-- upload failures
-- narrow/mobile layout
-- accessibility
-- cancellation
-- route/navigation behavior
-- external URL handling
-- security
-- privacy language
+Status (2026-09-13): hardening landed in unit tests. This environment cannot mark the Bazzite/Cockpit real-host gate passed.
 
-No major new features.
+| Topic | Result |
+| --- | --- |
+| Long-running commands | Elapsed timer, cancel, 10-minute hang ceiling shown in the running copy. A second probe while one is running is ignored. Refresh is disabled while detecting, probing, uploading, or reading inventory. |
+| Large inventories | Devices files up to 1 MiB; oversized reads are a read failure, not a probe failure. Each device/finding group lists at most 80 rows with an explicit remainder count. |
+| Virtualization | Device bus prefixes such as `virtio` are shown as hw-probe reported them. No VM-specific health claims. |
+| Missing hw-probe | Unavailable empty state remains; this plugin still does not install packages. |
+| Older/newer hw-probe | `-dumpversion` still accepts dotted versions including 1.4, 1.5, 1.7, and 2.0.x. There is no version compatibility matrix. |
+| Parser schema changes | Extra host keys and extra device fields are still ignored. Malformed rows are skipped. |
+| Offline systems | Local probe copy says internet is not required. Upload still explains that network access is required and classifies curl 6/7/28 as network-unavailable. |
+| Upload failures | Existing typed failures remain. Confirmation is an in-flow dialog (`aria-modal=false`) closable with Escape; external probe links use `noopener noreferrer` and `referrerpolicy=no-referrer`. |
+| Narrow/mobile layout | Page min-width 0, overflow-wrap, full-width compact actions under 36rem. |
+| Accessibility | `aria-busy` while work is in flight; running status is a live region without announcing elapsed every second; error boundary strings go through gettext. |
+| Cancellation | Cancel remains on probe and upload. Leaving the page invalidates in-flight inventory reads and cancels active spawn. |
+| Route/navigation | Single Cockpit tool page. Unmount cancels work instead of leaving `hw-probe` running. |
+| External URL handling | Only `https://linux-hardware.org/?probe=<id>` after validation. |
+| Security | Argv execution, no shell, no `sudo`. Refresh no longer tears down a ready summary into a blank detecting page. |
+| Privacy language | Unchanged: hashed identifiers, not complete anonymity. Stale inventory results cannot overwrite a newer read. |
+
+Implemented:
+
+- inventory load generation / keep-previous refresh
+- cancel probe and upload on page unmount
+- large-inventory render cap
+- Escape on upload confirmation
+- mobile overflow and action layout
+- offline/long-running copy
+- tests for the above
+
+Do not start v1.0 from this milestone.
+
+Real-host gate (operator): confirm Refresh during a long native probe stays disabled, a large USB inventory remains scrollable on a phone-width Cockpit pane, and Escape dismisses upload confirmation. This environment cannot mark that passed.
 
 ---
 

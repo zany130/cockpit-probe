@@ -33,6 +33,7 @@ export type CapabilityViewStatus =
 
 interface CapabilityViewProps {
     status: CapabilityViewStatus;
+    detecting?: boolean | undefined;
     onRefresh: () => void;
     execution?: ProbeExecutionState | undefined;
     onRunProbe?: (() => void) | undefined;
@@ -45,6 +46,7 @@ interface CapabilityViewProps {
 
 export const CapabilityView = ({
     status,
+    detecting = false,
     onRefresh,
     execution,
     onRunProbe,
@@ -55,9 +57,14 @@ export const CapabilityView = ({
     onCancelUpload,
 }: CapabilityViewProps) => {
     const loading = status.phase === "loading";
+    const busy = loading ||
+        detecting ||
+        execution?.status === "running" ||
+        upload?.status === "uploading" ||
+        inventory?.status === "loading";
 
     return (
-        <div className="hw-probe-status">
+        <div className="hw-probe-status" aria-busy={busy || undefined}>
             <Flex
                     className="hw-probe-actions"
                     justifyContent={{ default: 'justifyContentFlexEnd' }}
@@ -67,7 +74,7 @@ export const CapabilityView = ({
                     <Button
                             variant="secondary"
                             onClick={onRefresh}
-                            isDisabled={loading || execution?.status === "running" || upload?.status === "uploading"}
+                            isDisabled={busy}
                             aria-label={_("Refresh hardware probe detection")}
                     >
                         {_("Refresh")}
@@ -95,7 +102,9 @@ export const CapabilityView = ({
 const LoadingStatus = () => (
     <EmptyState titleText={_("Detecting hw-probe")} headingLevel="h2" icon={Spinner}>
         <EmptyStateBody>
-            {_("Checking whether hw-probe is installed and usable on this host.")}
+            <div role="status">
+                {_("Checking whether hw-probe is installed and usable on this host.")}
+            </div>
         </EmptyStateBody>
     </EmptyState>
 );
@@ -236,7 +245,7 @@ const UnavailableStatus = () => (
             icon={CubesIcon}
     >
         <EmptyStateBody>
-            {_("Install hw-probe on this host before hardware probing can be used.")}
+            {_("Install hw-probe on this host before hardware probing can be used. This page does not install packages.")}
         </EmptyStateBody>
     </EmptyState>
 );

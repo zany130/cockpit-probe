@@ -18,6 +18,7 @@ import {
 import cockpit from 'cockpit';
 
 import { deviceLabel, formatDeviceStatus } from './device-display';
+import { takeVisibleItems } from './display-limits';
 import { deriveFindingsFromSummary } from './findings-normalizer';
 import type { HardwareFinding, HardwareFindingsSummary, HardwareSummary } from './model';
 
@@ -126,28 +127,40 @@ const FindingList = ({
 }: {
     heading?: string | undefined;
     findings: HardwareFinding[];
-}) => (
-    <div className="hw-probe-finding-list">
-        {heading && <h3>{heading}</h3>}
-        <ul className="hw-probe-device-lines">
-            {findings.map((finding, index) => (
-                <li key={findingKey(finding, index)}>
-                    <div>{findingLabel(finding)}</div>
-                    <div className="hw-probe-device-meta">
-                        {cockpit.format(_("hw-probe status: $0"), formatDeviceStatus(finding.upstreamStatus))}
-                    </div>
-                    <div className="hw-probe-device-meta">{finding.summary}</div>
-                    {finding.detail && <div className="hw-probe-device-meta">{finding.detail}</div>}
-                    {finding.device?.driver && (
+}) => {
+    const { visible, hiddenCount } = takeVisibleItems(findings);
+    return (
+        <div className="hw-probe-finding-list">
+            {heading && <h3>{heading}</h3>}
+            <ul className="hw-probe-device-lines">
+                {visible.map((finding, index) => (
+                    <li key={findingKey(finding, index)}>
+                        <div>{findingLabel(finding)}</div>
                         <div className="hw-probe-device-meta">
-                            {cockpit.format(_("Driver: $0"), finding.device.driver)}
+                            {cockpit.format(_("hw-probe status: $0"), formatDeviceStatus(finding.upstreamStatus))}
                         </div>
+                        <div className="hw-probe-device-meta">{finding.summary}</div>
+                        {finding.detail && <div className="hw-probe-device-meta">{finding.detail}</div>}
+                        {finding.device?.driver && (
+                            <div className="hw-probe-device-meta">
+                                {cockpit.format(_("Driver: $0"), finding.device.driver)}
+                            </div>
+                        )}
+                    </li>
+                ))}
+            </ul>
+            {hiddenCount > 0 && (
+                <p className="hw-probe-summary-note">
+                    {cockpit.format(
+                        _("Showing $0 of $1 entries in this list."),
+                        String(visible.length),
+                        String(visible.length + hiddenCount)
                     )}
-                </li>
-            ))}
-        </ul>
-    </div>
-);
+                </p>
+            )}
+        </div>
+    );
+};
 
 function findingKey(finding: HardwareFinding, index: number): string {
     if (finding.device?.id)

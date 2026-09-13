@@ -19,7 +19,7 @@ import { normalizeInventory } from './inventory-normalizer';
 import type { InventoryError, InventoryState, ProbeExecutionState } from './model';
 import { NATIVE_PROBE_SUPERUSER } from './spawn';
 
-const INVENTORY_MAX_READ_SIZE = 1024 * 1024;
+export const INVENTORY_MAX_READ_SIZE = 1024 * 1024;
 
 export interface InventoryFileReadError {
     problem?: string | null | undefined;
@@ -50,6 +50,12 @@ function classifyReadError(error: unknown): InventoryError {
     }
     if (isReadError(error) && error.problem === "not-found")
         return inventoryError("missing", "No local hardware probe is available yet");
+    if (isReadError(error) && error.problem === "too-large") {
+        return inventoryError(
+            "read-failed",
+            "The hardware inventory is larger than this page will read"
+        );
+    }
     return inventoryError("read-failed", "The local hardware inventory could not be read");
 }
 
@@ -172,6 +178,71 @@ export function reconcileInventoryWithProbe(
         };
     }
     return inventory;
+}
+
+export type InventorySetter = (state: InventoryState) => void;
+
+export type InventoryLoadFn = (
+    invocation: HwProbeInvocation,
+    options?: {
+        readFile?: InventoryFileReader;
+        getUserHome?: () => Promise<string>;
+    }
+) => Promise<InventoryState>;
+
+export function createInventoryLoadSession(options?: {
+    load?: InventoryLoadFn;
+    readFile?: InventoryFileReader;
+    getUserHome?: () => Promise<string>;
+}) {
+    let generation = 0;
+    let last: InventoryState = { status: "idle" };
+    const load = options?.load ?? loadHardwareInventory;
+
+    const publish = (state: InventoryState, setInventory: InventorySetter) => {
+        last = state;
+        setInventory(state);
+    };
+
+    return {
+        request(
+            invocation: HwProbeInvocation,
+            execution: ProbeExecutionState,
+            setInventory: InventorySetter,
+            requestOptions?: { keepPrevious?: boolean }
+        ) {
+            const token = ++generation;
+            const keepPrevious = requestOptions?.keepPrevious === true;
+            if (!(keepPrevious && last.status !== "idle" && last.status !== "loading"))
+                publish({ status: "loading" }, setInventory);
+            const loadOptions: {
+                readFile?: InventoryFileReader;
+                getUserHome?: () => Promise<string>;
+            } = {};
+            if (options?.readFile !== undefined)
+                loadOptions.readFile = options.readFile;
+            if (options?.getUserHome !== undefined)
+                loadOptions.getUserHome = options.getUserHome;
+            load(invocation, loadOptions).then(result => {
+                if (token !== generation)
+                    return;
+                publish(reconcileInventoryWithProbe(result, execution), setInventory);
+            }, () => {
+                if (token !== generation)
+                    return;
+                publish({
+                    status: "failed",
+                    error: inventoryError(
+                        "unknown",
+                        "The local hardware inventory could not be read"
+                    ),
+                }, setInventory);
+            });
+        },
+        invalidate() {
+            generation += 1;
+        },
+    };
 }
 
 export function cockpitInventoryFileReader(): InventoryFileReader {

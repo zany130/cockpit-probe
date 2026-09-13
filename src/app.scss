@@ -3,6 +3,8 @@
 
 .hw-probe-page {
     max-width: 70rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .hw-probe-page .pf-v6-c-title {
@@ -40,6 +42,7 @@
 .hw-probe-device-lines {
     margin: 0;
     padding-inline-start: 1.25rem;
+    overflow-wrap: anywhere;
 }
 
 .hw-probe-device-lines li + li {
@@ -112,4 +115,19 @@
     flex-wrap: wrap;
     gap: var(--pf-t--global--spacer--sm);
     margin-block-start: var(--pf-t--global--spacer--md);
+}
+
+@media (width <= 36rem) {
+    .hw-probe-compact-run {
+        justify-content: stretch;
+    }
+
+    .hw-probe-compact-run .pf-v6-c-button,
+    .hw-probe-upload-actions .pf-v6-c-button {
+        inline-size: 100%;
+    }
+
+    .hw-probe-findings-counts .pf-v6-c-description-list {
+        grid-template-columns: 1fr;
+    }
 }

@@ -37,12 +37,29 @@ export const ShareProbeView = ({
 }: ShareProbeViewProps) => {
     const [confirming, setConfirming] = useState(false);
     const confirmRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
     const busy = upload.status === "uploading" || probeRunning;
 
     useEffect(() => {
         if (confirming)
             confirmRef.current?.focus();
     }, [confirming]);
+
+    useEffect(() => {
+        if (!confirming)
+            return undefined;
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== "Escape")
+                return;
+            event.preventDefault();
+            if (upload.status === "uploading")
+                return;
+            setConfirming(false);
+            window.setTimeout(() => triggerRef.current?.focus(), 0);
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [confirming, upload.status]);
 
     const openConfirmation = () => {
         if (!canUpload || busy)
@@ -54,6 +71,7 @@ export const ShareProbeView = ({
         if (upload.status === "uploading")
             return;
         setConfirming(false);
+        window.setTimeout(() => triggerRef.current?.focus(), 0);
     };
 
     const confirmUpload = () => {
@@ -86,6 +104,7 @@ export const ShareProbeView = ({
             )}
             {canUpload && upload.status === "idle" && !confirming && (
                 <Button
+                        innerRef={triggerRef}
                         variant="secondary"
                         onClick={openConfirmation}
                         isDisabled={busy}
@@ -127,7 +146,7 @@ export const ShareProbeView = ({
                         ref={confirmRef}
                         className="hw-probe-upload-confirm"
                         role="dialog"
-                        aria-modal="true"
+                        aria-modal="false"
                         aria-label={_("Upload this probe to linux-hardware.org")}
                         aria-describedby="hw-probe-upload-body"
                         tabIndex={-1}
@@ -220,19 +239,17 @@ const SuccessAlert = ({
         {result.url
             ? (
                 <p>
-                    <Button
-                            variant="link"
-                            isInline
-                            component="a"
+                    <a
+                            className="pf-v6-c-button pf-m-link pf-m-inline"
                             href={result.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            icon={<ExternalLinkAltIcon />}
-                            iconPosition="end"
+                            referrerPolicy="no-referrer"
                             aria-label={_("View uploaded probe on linux-hardware.org (opens an external website)")}
                     >
                         {_("View uploaded probe")}
-                    </Button>
+                        <ExternalLinkAltIcon className="pf-v6-c-button__icon pf-m-end" />
+                    </a>
                 </p>
             )
             : (

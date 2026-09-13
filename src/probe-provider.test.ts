@@ -170,6 +170,18 @@ describe('createProbeController', () => {
         expect(JSON.stringify(calls[0].spawnOptions)).not.toContain('"try"');
     });
 
+    it('ignores a second run while a probe is already running', async () => {
+        const { spawn, calls } = fakeSpawn({ hang: true });
+        const controller = createProbeController({ spawn, now: () => 1000 });
+        const first = controller.run(PATH_DUMPVERSION_INVOCATION);
+        const second = controller.run(PATH_DUMPVERSION_INVOCATION);
+        await Promise.resolve();
+        expect(controller.getState().status).toBe('running');
+        expect(calls).toHaveLength(1);
+        controller.cancel();
+        await Promise.allSettled([first, second]);
+    });
+
     it('runs a native /usr/bin/hw-probe install with -all and superuser require', async () => {
         const { spawn, calls } = fakeSpawn({
             byArgv: {

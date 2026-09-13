@@ -24,8 +24,11 @@ describe('parseHwProbeVersion', () => {
         expect(parseHwProbeVersion('1.6.5')).toEqual({ ok: true, version: '1.6.5' });
     });
 
-    it('accepts an AppImage-style release suffix', () => {
-        expect(parseHwProbeVersion('1.6.5-189\n')).toEqual({ ok: true, version: '1.6.5-189' });
+    it('accepts older and newer dumpversion strings without a compatibility matrix', () => {
+        expect(parseHwProbeVersion('1.4\n')).toEqual({ ok: true, version: '1.4' });
+        expect(parseHwProbeVersion('1.5.1')).toEqual({ ok: true, version: '1.5.1' });
+        expect(parseHwProbeVersion('1.7')).toEqual({ ok: true, version: '1.7' });
+        expect(parseHwProbeVersion('2.0.0-1')).toEqual({ ok: true, version: '2.0.0-1' });
     });
 
     it('rejects empty output', () => {

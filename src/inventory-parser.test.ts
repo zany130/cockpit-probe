@@ -155,6 +155,18 @@ describe('parseDevicesFile', () => {
         expect(row?.type).toBe('flux capacitor');
     });
 
+    it('parses a large devices file without failing the inventory', () => {
+        const rows = Array.from({ length: 400 }, (_, index) => (
+            `usb:hub-${String(index)};00;detected;hub;;Generic;USB Hub ${String(index)}`
+        )).join('\n');
+        const parsed = parseDevicesFile(rows);
+        expect(parsed.ok).toBe(true);
+        if (!parsed.ok)
+            return;
+        expect(parsed.devices).toHaveLength(400);
+        expect(parsed.diagnostics.skippedRows).toBe(0);
+    });
+
     it('rejects a completely malformed device source', () => {
         expect(parseDevicesFile(DEVICE_COMPLETELY_MALFORMED).ok).toBe(false);
         expect(parseDevicesFile('').ok).toBe(false);

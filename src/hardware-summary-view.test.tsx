@@ -92,6 +92,7 @@ describe('HardwareSummaryView', () => {
         expect(onRun).toHaveBeenCalledTimes(1);
         expect(screen.queryByRole('button', { name: /upload/i })).not.toBeInTheDocument();
         expect(screen.getByText(/Nothing is uploaded/)).toBeInTheDocument();
+        expect(screen.getByText(/This local probe does not need internet access/)).toBeInTheDocument();
         expect(screen.getByText(/Native hardware probes require Cockpit administrative access because hw-probe itself requires root/)).toBeInTheDocument();
     });
 
@@ -124,6 +125,23 @@ describe('HardwareSummaryView', () => {
         render(<HardwareSummaryView inventory={{ status: 'ready', summary }} />);
         expect(screen.getByText('Hardware Summary')).toBeInTheDocument();
         expect(screen.getByText(/No CPU was reported/)).toBeInTheDocument();
+    });
+
+    it('caps a large device group instead of rendering every row', () => {
+        const hubs = Array.from({ length: 85 }, (_, index) => (
+            `usb:hub-${String(index)};00;detected;hub;;Generic;USB Hub ${String(index)}`
+        ));
+        const result = normalizeInventory(
+            'arch:x86_64\ncores:6\n',
+            ['cpu:test-cpu;0b;works;cpu;;Test;CPU', ...hubs].join('\n')
+        );
+        if (!result.ok)
+            throw new Error('large fixture must normalize');
+        render(<HardwareSummaryView inventory={{ status: 'ready', summary: result.summary }} />);
+        screen.getByRole('button', { name: 'Other devices' }).click();
+        expect(screen.getByText(/Showing 80 of 85 devices in this group/)).toBeInTheDocument();
+        expect(screen.getAllByText(/USB Hub 0/).length).toBeGreaterThanOrEqual(1);
+        expect(screen.queryByText(/USB Hub 84/)).not.toBeInTheDocument();
     });
 
     it('keeps Share Probe below findings and does not upload on render', () => {

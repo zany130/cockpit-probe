@@ -35,6 +35,7 @@ import type {
     UploadState,
 } from './model';
 import { deviceLabel, formatDeviceStatus } from './device-display';
+import { takeVisibleItems } from './display-limits';
 import { DriveStatusView } from './drive-status-view';
 import { HardwareFindingsView } from './hardware-findings-view';
 import { buildSystemTitle } from './inventory-normalizer';
@@ -121,7 +122,7 @@ const EmptyInventory = ({
 }) => (
     <EmptyState titleText={_("No local hardware probe is available yet")} headingLevel="h2">
         <EmptyStateBody>
-            <p>{_("Run a local hardware probe to build a hardware summary. Nothing is uploaded.")}</p>
+            <p>{_("Run a local hardware probe to build a hardware summary. Nothing is uploaded. This local probe does not need internet access.")}</p>
             {backend === "flatpak"
                 ? (
                     <p>
@@ -371,23 +372,36 @@ function devicesForDisplay(id: DeviceCategoryId, devices: HardwareDevice[]): Har
     return unique;
 }
 
-const CategoryBlock = ({ id, devices }: { id: DeviceCategoryId; devices: HardwareDevice[] }) => (
-    <section className="hw-probe-category">
-        <h3>{categoryLabel(id)}</h3>
-        <ul className="hw-probe-device-lines">
-            {devicesForDisplay(id, devices).map((device, index) => (
-                <li key={device.id + ":" + String(index)}>
-                    <div>{deviceLabel(device)}</div>
-                    <div className="hw-probe-device-meta">
-                        {device.driver
-                            ? cockpit.format(_("Driver: $0 · $1"), device.driver, formatDeviceStatus(device.status))
-                            : formatDeviceStatus(device.status)}
-                    </div>
-                </li>
-            ))}
-        </ul>
-    </section>
-);
+const CategoryBlock = ({ id, devices }: { id: DeviceCategoryId; devices: HardwareDevice[] }) => {
+    const prepared = devicesForDisplay(id, devices);
+    const { visible, hiddenCount } = takeVisibleItems(prepared);
+    return (
+        <section className="hw-probe-category">
+            <h3>{categoryLabel(id)}</h3>
+            <ul className="hw-probe-device-lines">
+                {visible.map((device, index) => (
+                    <li key={device.id + ":" + String(index)}>
+                        <div>{deviceLabel(device)}</div>
+                        <div className="hw-probe-device-meta">
+                            {device.driver
+                                ? cockpit.format(_("Driver: $0 · $1"), device.driver, formatDeviceStatus(device.status))
+                                : formatDeviceStatus(device.status)}
+                        </div>
+                    </li>
+                ))}
+            </ul>
+            {hiddenCount > 0 && (
+                <p className="hw-probe-summary-note">
+                    {cockpit.format(
+                        _("Showing $0 of $1 devices in this group."),
+                        String(visible.length),
+                        String(visible.length + hiddenCount)
+                    )}
+                </p>
+            )}
+        </section>
+    );
+};
 
 const Item = ({ term, value }: { term: string; value: string }) => (
     <DescriptionListGroup>
