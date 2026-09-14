@@ -48,9 +48,9 @@
     "vitest": "3.2.4"
   },
   "dependencies": {
-    "@patternfly/patternfly": "6.1.0",
-    "@patternfly/react-core": "6.1.0",
-    "@patternfly/react-icons": "6.1.0",
+    "@patternfly/patternfly": "6.6.1",
+    "@patternfly/react-core": "6.6.1",
+    "@patternfly/react-icons": "6.6.1",
     "@patternfly/react-styles": "6.6.1",
     "argparse": "3.0.1",
     "esbuild": "0.28.2",
